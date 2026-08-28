@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coach Dashboard — Live Football Stats</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel2: #1c2230;
+    --line: #2b3444;
+    --text: #e6edf3;
+    --muted: #8b98a8;
+    --home: #4c9ffe;
+    --away: #ff8a3d;
+    --good: #3fb950;
+    --bad: #f85149;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  header {
+    position: sticky; top: 0; z-index: 5;
+    background: linear-gradient(180deg, #11161f, #0d1117);
+    border-bottom: 1px solid var(--line);
+    padding: 10px 14px;
+  }
+  .topbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .score { display: flex; align-items: baseline; gap: 10px; font-weight: 700; }
+  .score .t { font-size: 15px; color: var(--muted); }
+  .score .v { font-size: 30px; line-height: 1; }
+  .score.home .v { color: var(--home); }
+  .score.away .v { color: var(--away); }
+  .sep { color: var(--muted); font-size: 20px; }
+  .spacer { flex: 1 1 auto; }
+  .chip {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 999px; padding: 6px 12px; font-size: 13px;
+  }
+  select, button {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 7px 11px; font-size: 14px;
+  }
+  button { cursor: pointer; }
+  button:hover { border-color: #3d4a5f; }
+  a { color: var(--home); text-decoration: none; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); display: inline-block; }
+  .dot.on { background: var(--good); }
+  main { padding: 14px; max-width: 1500px; margin: 0 auto; }
+  .notes { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-bottom: 14px; }
+  .note {
+    padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--panel); font-size: 15px; font-weight: 600;
+  }
+  .note.up { border-color: #2c6e3a; background: #102517; }
+  .note.down { border-color: #6e2c2c; background: #251111; }
+  .note .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); display: block; margin-bottom: 3px; font-weight: 700; }
+  .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-width: 0; }
+  .card h2 { margin: 0 0 10px; font-size: 14px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+  .card .sub { font-size: 12px; color: var(--muted); margin: -6px 0 10px; }
+  .chartbox { position: relative; height: 260px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  tbody tr:last-child td { border-bottom: none; }
+  .cmp td.h { color: var(--home); font-weight: 700; }
+  .cmp td.a { color: var(--away); font-weight: 700; }
+  .cmp td.metric { color: var(--text); font-weight: 600; text-align: center; }
+  .cmp .win { text-decoration: underline; text-decoration-color: var(--good); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+  .teamtag { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 700; }
+  .teamtag.home { background: rgba(76,159,254,.16); color: var(--home); }
+  .teamtag.away { background: rgba(255,138,61,.16); color: var(--away); }
+  .empty { color: var(--muted); font-size: 14px; padding: 18px 4px; text-align: center; }
+  .scroll { max-height: 340px; overflow: auto; }
+  .subtabs { display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+  .subtabs button.active { background: var(--home); border-color: var(--home); color: #04121f; font-weight: 700; }
+  .log { font-size: 13px; }
+  .log .row { padding: 7px 4px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: baseline; }
+  .log .sit { color: var(--muted); min-width: 62px; }
+  .log .tag { font-size: 10px; font-weight: 700; color: var(--good); text-transform: uppercase; }
+  @media (max-width: 700px) {
+    .grid { grid-template-columns: 1fr; }
+    .card { padding: 11px; }
+    .chartbox { height: 220px; }
+    .score .v { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="topbar">
+    <div class="score home"><span class="t" id="homeName">Home</span> <span class="v" id="homeScore">0</span></div>
+    <span class="sep">–</span>
+    <div class="score away"><span class="v" id="awayScore">0</span> <span class="t" id="awayName">Away</span></div>
+    <span class="chip" id="qtr">Q1</span>
+    <span class="chip" id="possession">—</span>
+    <div class="spacer"></div>
+    <select id="gamePick" title="Game"></select>
+    <span class="chip"><span class="dot" id="dot"></span> <span id="status">connecting…</span></span>
+    <a class="chip" href="index.html" id="trackLink">Stat entry →</a>
+  </div>
+</header>
+
+<main>
+  <div class="notes" id="notes"></div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Momentum — rolling 8-play yards/play</h2>
+      <div class="sub">Above a team's game average = offense heating up.</div>
+      <div class="chartbox"><canvas id="cMomentum"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Cumulative yards</h2>
+      <div class="sub">By each team's own snap count.</div>
+      <div class="chartbox"><canvas id="cCumulative"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Yards per play by quarter</h2>
+      <div class="chartbox"><canvas id="cQuarter"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Success rate by down</h2>
+      <div class="sub">Successful = 40%+ of distance on 1st, 60% on 2nd, conversion on 3rd/4th.</div>
+      <div class="chartbox"><canvas id="cDown"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Run vs pass</h2>
+      <div class="sub">Play count share and yards per play by type.</div>
+      <div class="chartbox"><canvas id="cType"></canvas></div>
+    </div>
+
+    <div class="card">
+      <h2>Points by quarter</h2>
+      <div class="chartbox"><canvas id="cPoints"></canvas></div>
+    </div>
+
+    <div class="card" style="grid-column: 1 / -1;">
+      <h2>Team comparison</h2>
+      <table class="cmp"><tbody id="cmpBody"></tbody></table>
+    </div>
+
+    <div class="card">
+      <h2>Player leaders <span class="teamtag home" id="plHomeTag">Home</span></h2>
+      <div class="subtabs" data-side="home">
+        <button data-cat="rush" class="active">Rushing</button>
+        <button data-cat="pass">Passing</button>
+        <button data-cat="rec">Receiving</button>
+        <button data-cat="def">Defense</button>
+      </div>
+      <div class="scroll" id="plHome"></div>
+    </div>
+
+    <div class="card">
+      <h2>Player leaders <span class="teamtag away" id="plAwayTag">Away</span></h2>
+      <div class="subtabs" data-side="away">
+        <button data-cat="rush" class="active">Rushing</button>
+        <button data-cat="pass">Passing</button>
+        <button data-cat="rec">Receiving</button>
+        <button data-cat="def">Defense</button>
+      </div>
+      <div class="scroll" id="plAway"></div>
+    </div>
+
+    <div class="card">
+      <h2>Drives</h2>
+      <div class="scroll" id="drives"></div>
+    </div>
+
+    <div class="card">
+      <h2>Play log</h2>
+      <div class="scroll log" id="log"></div>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+import { watchGame, watchPlays, GAMES, collection, getDocs, db } from "./js/firebase.js";
+import {
+  computeTeamStats, computePlayerStats, computeDrives, computeQuarterTrends,
+  computeMomentum, computeDownSplits, computeTypeSplits, trendNotes, formatPlay
+} from "./js/stats.js";
+
+const HOME_COLOR = "#4c9ffe";
+const AWAY_COLOR = "#ff8a3d";
+
+const params = new URLSearchParams(location.search);
+let gameId = params.get("game") || localStorage.getItem("fst.gameId") || "live";
+let game = null;
+let plays = [];
+let unsubGame = null;
+let unsubPlays = null;
+const cat = { home: "rush", away: "rush" };
+
+const $ = (id) => document.getElementById(id);
+const teamNames = () => ({
+  home: (game && game.homeName) || "Home",
+  away: (game && game.awayName) || "Away"
+});
+const rosters = () => (game && game.rosters) || { home: [], away: [] };
+const f1 = (v) => (Math.round(v * 10) / 10).toFixed(1);
+const pct = (v) => `${Math.round(v)}%`;
+
+Chart.defaults.color = "#8b98a8";
+Chart.defaults.borderColor = "#2b3444";
+Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+Chart.defaults.animation.duration = 250;
+Chart.defaults.maintainAspectRatio = false;
+
+const charts = {};
+function chart(id, config) {
+  if (charts[id]) {
+    charts[id].data = config.data;
+    charts[id].options = config.options || charts[id].options;
+    charts[id].update();
+    return charts[id];
+  }
+  charts[id] = new Chart($(id), config);
+  return charts[id];
+}
+
+const lineOpts = (yTitle) => ({
+  responsive: true,
+  interaction: { mode: "index", intersect: false },
+  plugins: { legend: { labels: { boxWidth: 12 } } },
+  scales: {
+    x: { title: { display: true, text: "Team snap #" }, grid: { color: "#212936" } },
+    y: { title: { display: true, text: yTitle }, grid: { color: "#212936" } }
+  }
+});
+
+const barOpts = (yTitle, extra = {}) => ({
+  responsive: true,
+  plugins: { legend: { labels: { boxWidth: 12 } } },
+  scales: {
+    x: { grid: { display: false } },
+    y: { title: { display: true, text: yTitle }, grid: { color: "#212936" }, ...(extra.y || {}) }
+  }
+});
+
+function setStatus(ok, text) {
+  $("dot").classList.toggle("on", !!ok);
+  $("status").textContent = text;
+}
+
+/* ---------- game list ---------- */
+async function loadGameList() {
+  try {
+    const snap = await getDocs(collection(db, GAMES));
+    const pick = $("gamePick");
+    pick.innerHTML = "";
+    const ids = snap.docs.map((d) => ({ id: d.id, name: (d.data() && (d.data().name || d.data().gameId)) || d.id }));
+    if (!ids.find((g) => g.id === gameId)) ids.unshift({ id: gameId, name: gameId });
+    ids.forEach((g) => {
+      const o = document.createElement("option");
+      o.value = g.id;
+      o.textContent = g.name;
+      if (g.id === gameId) o.selected = true;
+      pick.appendChild(o);
+    });
+  } catch (err) {
+    console.warn("game list unavailable", err);
+  }
+}
+
+$("gamePick").addEventListener("change", (e) => {
+  gameId = e.target.value;
+  localStorage.setItem("fst.gameId", gameId);
+  history.replaceState(null, "", `?game=${encodeURIComponent(gameId)}`);
+  subscribe();
+});
+
+document.querySelectorAll(".subtabs").forEach((box) => {
+  box.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    const side = box.dataset.side;
+    cat[side] = btn.dataset.cat;
+    box.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === btn));
+    renderPlayers();
+  });
+});
+
+/* ---------- rendering ---------- */
+function renderHeader(totals) {
+  const names = teamNames();
+  $("homeName").textContent = names.home;
+  $("awayName").textContent = names.away;
+  $("homeScore").textContent = totals.home.points;
+  $("awayScore").textContent = totals.away.points;
+  $("plHomeTag").textContent = names.home;
+  $("plAwayTag").textContent = names.away;
+  const q = game && game.quarter ? game.quarter : 1;
+  $("qtr").textContent = q === 5 || q === "OT" ? "OT" : `Q${q}`;
+  const poss = game && game.possession ? names[game.possession] : null;
+  $("possession").textContent = poss ? `Ball: ${poss}` : "—";
+  $("trackLink").href = `index.html?game=${encodeURIComponent(gameId)}`;
+}
+
+function renderNotes() {
+  const notes = trendNotes(plays, teamNames());
+  const box = $("notes");
+  if (!notes.length) {
+    box.innerHTML = '<div class="note"><span class="lbl">Live trend</span>Waiting for plays…</div>';
+    return;
+  }
+  box.innerHTML = notes.map((n) => `
+    <div class="note ${n.dir === "heating up" ? "up" : n.dir === "cooling off" ? "down" : ""}">
+      <span class="lbl">Live trend</span>${n.text}
+    </div>`).join("");
+}
+
+const CMP_ROWS = [
+  ["Points", (t) => t.points, 0],
+  ["Total yards", (t) => t.totalYards, 0],
+  ["Yards / play", (t) => t.yardsPerPlay, 1],
+  ["Plays", (t) => t.plays, 0],
+  ["Rush yds (att)", (t) => `${t.rushYards} (${t.rushAtt})`, "s"],
+  ["Yards / carry", (t) => t.rushYPC, 1],
+  ["Pass yds (c/att)", (t) => `${t.passYards} (${t.passComp}/${t.passAtt})`, "s"],
+  ["Completion %", (t) => t.compPct, "%"],
+  ["Yards / attempt", (t) => t.passYPA, 1],
+  ["Success rate", (t) => t.successRate, "%"],
+  ["First downs", (t) => t.firstDowns, 0],
+  ["3rd down", (t) => `${t.thirdConv}/${t.thirdAtt} (${Math.round(t.thirdPct)}%)`, "s"],
+  ["4th down", (t) => `${t.fourthConv}/${t.fourthAtt}`, "s"],
+  ["Explosive plays (15+)", (t) => t.explosive, 0],
+  ["Negative plays", (t) => t.negative, 0],
+  ["Sacks allowed", (t) => t.sacksTaken, 0],
+  ["Turnovers", (t) => t.turnovers, 0],
+  ["Penalties (yds)", (t) => `${t.penalties} (${t.penaltyYards})`, "s"],
+  ["Red zone TD/trips", (t) => `${t.redZoneTD}/${t.redZoneTrips}`, "s"],
+  ["Drives", (t) => t.drives, 0],
+  ["Yards / drive", (t) => t.yardsPerDrive, 1],
+  ["Scoring drives", (t) => t.scoringDrives, 0],
+  ["Yds/play allowed", (t) => t.yardsPerPlayAllowed, 1],
+  ["Tackles", (t) => t.defTackles, 0],
+  ["Sacks", (t) => t.defSacks, 0],
+  ["Takeaways", (t) => t.defInt + t.defFF, 0]
+];
+
+function fmtCell(v, kind) {
+  if (kind === "s") return v;
+  if (kind === "%") return pct(v);
+  if (kind === 1) return f1(v);
+  return String(v);
+}
+
+function renderComparison(totals) {
+  const names = teamNames();
+  const rows = CMP_ROWS.map(([label, get, kind]) => {
+    const h = get(totals.home);
+    const a = get(totals.away);
+    let hWin = false, aWin = false;
+    if (kind !== "s" && typeof h === "number" && typeof a === "number" && h !== a) {
+      const lowerIsBetter = label === "Turnovers" || label === "Negative plays" ||
+        label === "Sacks allowed" || label === "Penalties (yds)" || label === "Yds/play allowed";
+      const homeBetter = lowerIsBetter ? h < a : h > a;
+      hWin = homeBetter;
+      aWin = !homeBetter;
+    }
+    return `<tr>
+      <td class="h ${hWin ? "win" : ""}">${fmtCell(h, kind)}</td>
+      <td class="metric">${label}</td>
+      <td class="a ${aWin ? "win" : ""}" style="text-align:left">${fmtCell(a, kind)}</td>
+    </tr>`;
+  }).join("");
+  $("cmpBody").innerHTML =
+    `<tr><th style="text-align:left;color:${HOME_COLOR}">${names.home}</th><th style="text-align:center"></th><th style="text-align:left;color:${AWAY_COLOR}">${names.away}</th></tr>` + rows;
+}
+
+const PLAYER_TABLES = {
+  rush: {
+    cols: [["Player", (p) => p.name ? `#${p.num} ${p.name}` : p.id], ["Att", (p) => p.rushAtt], ["Yds", (p) => p.rushYards],
+      ["YPC", (p) => f1(p.rushYPC)], ["Long", (p) => p.rushLong], ["TD", (p) => p.rushTD], ["Succ%", (p) => pct(p.successRate)]],
+    filter: (p) => p.rushAtt > 0,
+    sort: (a, b) => b.rushYards - a.rushYards
+  },
+  pass: {
+    cols: [["Player", (p) => p.name ? `#${p.num} ${p.name}` : p.id], ["C/A", (p) => `${p.passComp}/${p.passAtt}`],
+      ["Yds", (p) => p.passYards], ["YPA", (p) => f1(p.passYPA)], ["Comp%", (p) => pct(p.compPct)],
+      ["TD", (p) => p.passTD], ["INT", (p) => p.passInt]],
+    filter: (p) => p.passAtt > 0,
+    sort: (a, b) => b.passYards - a.passYards
+  },
+  rec: {
+    cols: [["Player", (p) => p.name ? `#${p.num} ${p.name}` : p.id], ["Tgt", (p) => p.targets], ["Rec", (p) => p.rec],
+      ["Yds", (p) => p.recYards], ["YPR", (p) => f1(p.recYPC)], ["Long", (p) => p.recLong], ["TD", (p) => p.recTD]],
+    filter: (p) => p.targets > 0,
+    sort: (a, b) => b.recYards - a.recYards
+  },
+  def: {
+    cols: [["Player", (p) => p.name ? `#${p.num} ${p.name}` : p.id], ["Tkl", (p) => p.tackles], ["TFL", (p) => p.tfl],
+      ["Sacks", (p) => p.sacks], ["INT", (p) => p.ints], ["FF", (p) => p.ff]],
+    filter: (p) => p.tackles + p.sacks + p.ints + p.ff > 0,
+    sort: (a, b) => (b.tackles + b.sacks * 2 + b.ints * 2) - (a.tackles + a.sacks * 2 + a.ints * 2)
+  }
+};
+
+function playerTable(list, kind) {
+  const def = PLAYER_TABLES[kind];
+  const rows = list.filter(def.filter).sort(def.sort);
+  if (!rows.length) return '<div class="empty">No plays recorded yet.</div>';
+  const head = def.cols.map(([label]) => `<th>${label}</th>`).join("");
+  const body = rows.map((p) => `<tr>${def.cols.map(([, get]) => `<td>${get(p)}</td>`).join("")}</tr>`).join("");
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+let playerStats = { home: [], away: [] };
+function renderPlayers() {
+  $("plHome").innerHTML = playerTable(playerStats.home, cat.home);
+  $("plAway").innerHTML = playerTable(playerStats.away, cat.away);
+}
+
+function renderDrives() {
+  const drives = computeDrives(plays);
+  const names = teamNames();
+  if (!drives.length) {
+    $("drives").innerHTML = '<div class="empty">No drives yet.</div>';
+    return;
+  }
+  const rows = drives.slice().reverse().map((d) => `<tr>
+      <td><span class="teamtag ${d.team}">${names[d.team]}</span></td>
+      <td>Q${d.quarter}</td>
+      <td>${d.plays}</td>
+      <td>${d.yards}</td>
+      <td>${d.firstDowns}</td>
+      <td>${d.points}</td>
+      <td style="text-align:left">${d.result}</td>
+    </tr>`).join("");
+  $("drives").innerHTML = `<table><thead><tr>
+      <th>Team</th><th>Qtr</th><th>Plays</th><th>Yds</th><th>1st</th><th>Pts</th><th style="text-align:left">Result</th>
+    </tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderLog() {
+  if (!plays.length) {
+    $("log").innerHTML = '<div class="empty">No plays recorded yet.</div>';
+    return;
+  }
+  $("log").innerHTML = plays.slice().reverse().slice(0, 60).map((p) => {
+    const f = formatPlay(p, rosters(), teamNames());
+    return `<div class="row">
+      <span class="teamtag ${p.team}">${f.team}</span>
+      <span class="sit">${f.situation}</span>
+      <span>${f.desc}</span>
+      ${f.tags.map((t) => `<span class="tag">${t}</span>`).join(" ")}
+    </div>`;
+  }).join("");
+}
+
+function renderCharts(totals) {
+  const names = teamNames();
+  const mom = computeMomentum(plays);
+  const maxN = Math.max(mom.home.length, mom.away.length, 1);
+  const labels = Array.from({ length: maxN }, (_, i) => i + 1);
+  const pad = (arr, key) => labels.map((_, i) => (arr[i] ? Math.round(arr[i][key] * 10) / 10 : null));
+
+  chart("cMomentum", {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        { label: names.home, data: pad(mom.home, "rollingYpp"), borderColor: HOME_COLOR, backgroundColor: HOME_COLOR, tension: .3, spanGaps: true, pointRadius: 2 },
+        { label: names.away, data: pad(mom.away, "rollingYpp"), borderColor: AWAY_COLOR, backgroundColor: AWAY_COLOR, tension: .3, spanGaps: true, pointRadius: 2 },
+        { label: `${names.home} game avg`, data: labels.map(() => Math.round(totals.home.yardsPerPlay * 10) / 10), borderColor: HOME_COLOR, borderDash: [5, 5], pointRadius: 0, borderWidth: 1 },
+        { label: `${names.away} game avg`, data: labels.map(() => Math.round(totals.away.yardsPerPlay * 10) / 10), borderColor: AWAY_COLOR, borderDash: [5, 5], pointRadius: 0, borderWidth: 1 }
+      ]
+    },
+    options: lineOpts("Yards / play")
+  });
+
+  chart("cCumulative", {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        { label: names.home, data: pad(mom.home, "cumYards"), borderColor: HOME_COLOR, backgroundColor: "rgba(76,159,254,.15)", fill: true, tension: .25, pointRadius: 0 },
+        { label: names.away, data: pad(mom.away, "cumYards"), borderColor: AWAY_COLOR, backgroundColor: "rgba(255,138,61,.15)", fill: true, tension: .25, pointRadius: 0 }
+      ]
+    },
+    options: lineOpts("Total yards")
+  });
+
+  const qt = computeQuarterTrends(plays);
+  const qLabels = qt.quarters.length ? qt.quarters.map((q) => (q >= 5 ? "OT" : `Q${q}`)) : ["Q1"];
+  const qSeries = (side, key) => (qt.quarters.length ? qt.series[side].map((s) => Math.round(s[key] * 10) / 10) : [0]);
+
+  chart("cQuarter", {
+    type: "bar",
+    data: {
+      labels: qLabels,
+      datasets: [
+        { label: names.home, data: qSeries("home", "ypp"), backgroundColor: HOME_COLOR },
+        { label: names.away, data: qSeries("away", "ypp"), backgroundColor: AWAY_COLOR }
+      ]
+    },
+    options: barOpts("Yards / play")
+  });
+
+  chart("cPoints", {
+    type: "bar",
+    data: {
+      labels: qLabels,
+      datasets: [
+        { label: names.home, data: qSeries("home", "points"), backgroundColor: HOME_COLOR },
+        { label: names.away, data: qSeries("away", "points"), backgroundColor: AWAY_COLOR }
+      ]
+    },
+    options: barOpts("Points")
+  });
+
+  const ds = computeDownSplits(plays);
+  chart("cDown", {
+    type: "bar",
+    data: {
+      labels: ["1st down", "2nd down", "3rd down", "4th down"],
+      datasets: [
+        { label: names.home, data: ds.home.map((s) => Math.round(s.successRate)), backgroundColor: HOME_COLOR },
+        { label: names.away, data: ds.away.map((s) => Math.round(s.successRate)), backgroundColor: AWAY_COLOR }
+      ]
+    },
+    options: barOpts("Success rate %", { y: { min: 0, max: 100 } })
+  });
+
+  const ts = computeTypeSplits(plays);
+  chart("cType", {
+    type: "bar",
+    data: {
+      labels: [`${names.home} run`, `${names.home} pass`, `${names.away} run`, `${names.away} pass`],
+      datasets: [
+        {
+          label: "Yards / play",
+          data: [ts.home.run.ypp, ts.home.pass.ypp, ts.away.run.ypp, ts.away.pass.ypp].map((v) => Math.round(v * 10) / 10),
+          backgroundColor: [HOME_COLOR, "rgba(76,159,254,.5)", AWAY_COLOR, "rgba(255,138,61,.5)"]
+        },
+        {
+          label: "Plays",
+          data: [ts.home.run.plays, ts.home.pass.plays, ts.away.run.plays, ts.away.pass.plays],
+          backgroundColor: "rgba(139,152,168,.45)"
+        }
+      ]
+    },
+    options: barOpts("Yards / play  ·  plays")
+  });
+}
+
+function renderAll() {
+  const totals = computeTeamStats(plays);
+  playerStats = computePlayerStats(plays, rosters());
+  renderHeader(totals);
+  renderNotes();
+  renderComparison(totals);
+  renderPlayers();
+  renderDrives();
+  renderLog();
+  renderCharts(totals);
+}
+
+/* ---------- live subscriptions ---------- */
+function subscribe() {
+  if (unsubGame) unsubGame();
+  if (unsubPlays) unsubPlays();
+  game = null;
+  plays = [];
+  renderAll();
+  unsubGame = watchGame(gameId, (data) => {
+    game = data;
+    setStatus(true, "live");
+    renderAll();
+  }, (err) => {
+    console.error(err);
+    setStatus(false, "offline — check Firestore rules");
+  });
+  unsubPlays = watchPlays(gameId, (list) => {
+    plays = list;
+    setStatus(true, "live");
+    renderAll();
+  }, (err) => {
+    console.error(err);
+    setStatus(false, "offline — check Firestore rules");
+  });
+}
+
+localStorage.setItem("fst.gameId", gameId);
+loadGameList();
+subscribe();
+</script>
+</body>
+</html>
