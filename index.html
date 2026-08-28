@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1020" />
+  <title>BGSN Football Stat Tracker</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #141b31;
+      --panel-2: #1c2643;
+      --border: #2b385d;
+      --text: #edf1ff;
+      --muted: #9ca9c8;
+      --accent: #6d8cff;
+      --accent-2: #4ee0ad;
+      --danger: #ff627d;
+      --warning: #ffbd66;
+      --radius: 14px;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { max-width: 720px; margin: 0 auto; padding: 14px 14px calc(24px + env(safe-area-inset-bottom)); }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 3px 0 12px; }
+    .header h1 { margin: 0; font-size: 1.25rem; letter-spacing: -.02em; }
+    .status { border-radius: 999px; padding: 5px 10px; font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
+    .status.connected { background: var(--accent-2); color: #07151a; }
+    .status.offline { background: var(--danger); color: white; }
+    .tabs { position: sticky; top: 0; z-index: 10; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; padding: 6px 0 10px; background: var(--bg); }
+    .tab { min-height: 44px; border: 2px solid var(--border); border-radius: 11px; background: var(--panel); color: var(--muted); font-size: .78rem; font-weight: 800; }
+    .tab.active { border-color: var(--accent); background: var(--panel-2); color: var(--text); }
+    .tab.dashboard { grid-column: span 4; min-height: 36px; border-color: transparent; color: var(--accent-2); background: transparent; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .card { margin: 0 0 12px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
+    .card h2, .card h3 { margin: 0 0 11px; font-size: .94rem; }
+    .section-label { display: block; margin: 0 0 6px; color: var(--muted); font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .field { margin-bottom: 10px; }
+    .field:last-child { margin-bottom: 0; }
+    .field input, .field select { width: 100%; min-height: 44px; border: 2px solid var(--border); border-radius: 10px; outline: none; padding: 9px 11px; background: var(--bg); color: var(--text); }
+    .field input:focus, .field select:focus { border-color: var(--accent); }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .btn { min-height: 44px; border: 0; border-radius: 10px; padding: 10px 13px; color: var(--text); background: var(--panel-2); font-weight: 800; }
+    .btn:active, .choice:active { transform: translateY(1px); opacity: .82; }
+    .btn.primary { background: var(--accent); color: white; }
+    .btn.success { background: var(--accent-2); color: #061a17; }
+    .btn.danger { background: var(--danger); color: white; }
+    .btn.outline { border: 2px solid var(--border); background: transparent; color: var(--muted); }
+    .btn.small { min-height: 34px; padding: 6px 9px; font-size: .74rem; }
+    .button-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .button-row > .btn { flex: 1; }
+    .scoreboard { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; text-align: center; }
+    .score-team { min-width: 0; }
+    .score-team strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .85rem; }
+    .score-team b { display: block; margin-top: 1px; color: var(--accent-2); font-size: 2.2rem; line-height: 1; }
+    .score-divider { color: var(--muted); font-size: .7rem; font-weight: 800; }
+    .game-state { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 13px; }
+    .state-box { padding: 8px 4px; border-radius: 9px; background: var(--bg); text-align: center; }
+    .state-box span { display: block; color: var(--muted); font-size: .65rem; text-transform: uppercase; }
+    .state-box b { font-size: 1rem; }
+    .possession { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .possession .btn { min-height: 56px; font-size: 1rem; }
+    .possession .btn.active { border: 2px solid var(--accent-2); background: rgba(78, 224, 173, .14); color: var(--accent-2); }
+    .choices { display: flex; flex-wrap: wrap; gap: 7px; }
+    .choice { min-height: 40px; border: 2px solid var(--border); border-radius: 10px; padding: 8px 11px; background: var(--bg); color: var(--text); font-size: .8rem; font-weight: 800; }
+    .choice.selected { border-color: var(--accent); background: rgba(109, 140, 255, .18); color: white; }
+    .choice.suggested:not(.selected) { border-color: var(--warning); color: var(--warning); }
+    .quick-yards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+    .quick-yards .choice { padding: 7px 3px; }
+    .stepper { display: flex; gap: 6px; align-items: center; }
+    .stepper .btn { min-width: 44px; padding: 6px; }
+    .stepper input { min-width: 0; flex: 1; text-align: center; }
+    .check-row { display: flex; flex-wrap: wrap; gap: 9px; }
+    .check { display: flex; align-items: center; gap: 6px; min-height: 38px; color: var(--text); font-size: .82rem; }
+    .check input { width: 19px; height: 19px; accent-color: var(--accent); }
+    .roster-item, .log-row, .recent-row { display: flex; align-items: center; gap: 9px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .roster-item:last-child, .log-row:last-child, .recent-row:last-child { border-bottom: 0; }
+    .roster-item .details, .log-main, .recent-main { min-width: 0; flex: 1; }
+    .roster-item .details strong { display: block; }
+    .roster-item .details small, .log-main small, .recent-main small { color: var(--muted); }
+    .empty { padding: 18px 4px; color: var(--muted); text-align: center; font-size: .84rem; }
+    .team-toggle { display: flex; gap: 7px; margin-bottom: 12px; }
+    .team-toggle .choice { flex: 1; }
+    .yard-adjust { display: grid; grid-template-columns: auto 1fr auto; gap: 7px; align-items: center; }
+    .yard-adjust b { text-align: center; font-size: 1.15rem; }
+    .hint { margin: 8px 0 0; color: var(--muted); font-size: .75rem; line-height: 1.4; }
+    .toast { position: fixed; left: 50%; bottom: 18px; z-index: 40; width: max-content; max-width: calc(100% - 28px); transform: translate(-50%, 100px); padding: 11px 15px; border-radius: 11px; background: var(--panel-2); color: var(--text); box-shadow: 0 8px 30px rgba(0,0,0,.45); font-size: .82rem; font-weight: 700; opacity: 0; transition: .22s ease; pointer-events: none; }
+    .toast.visible { transform: translate(-50%, 0); opacity: 1; }
+    .error { color: var(--danger); font-size: .78rem; }
+    a { color: var(--accent-2); }
+    @media (max-width: 420px) {
+      body { padding-left: 10px; padding-right: 10px; }
+      .tab { font-size: .7rem; }
+      .card { padding: 12px; }
+      .score-team b { font-size: 1.9rem; }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <h1>BGSN Football Tracker</h1>
+    <span id="statusBadge" class="status offline">Connecting</span>
+  </header>
+  <nav class="tabs" aria-label="Main navigation">
+    <button class="tab active" data-tab="game">Game</button>
+    <button class="tab" data-tab="track">Track</button>
+    <button class="tab" data-tab="roster">Roster</button>
+    <button class="tab" data-tab="log">Log</button>
+    <a id="dashboardLink" class="tab dashboard" href="dashboard.html">Open coach dashboard →</a>
+  </nav>
+
+  <main>
+    <section id="gamePanel" class="panel active">
+      <div class="card">
+        <h2>Live score</h2>
+        <div id="scoreboard" class="scoreboard"></div>
+        <div id="gameState" class="game-state"></div>
+      </div>
+      <div class="card">
+        <h2>Game setup</h2>
+        <div class="grid-2">
+          <div class="field"><label class="section-label" for="gameIdInput">Game ID</label><input id="gameIdInput" placeholder="e.g. west-final-2025" /></div>
+          <div class="field"><label class="section-label" for="gameDateInput">Date</label><input id="gameDateInput" type="date" /></div>
+        </div>
+        <div class="field"><label class="section-label" for="gameNameInput">Game name</label><input id="gameNameInput" placeholder="Friday night matchup" /></div>
+        <div class="grid-2">
+          <div class="field"><label class="section-label" for="homeNameInput">Home team</label><input id="homeNameInput" placeholder="Home" /></div>
+          <div class="field"><label class="section-label" for="awayNameInput">Away team</label><input id="awayNameInput" placeholder="Away" /></div>
+        </div>
+        <div class="field"><label class="section-label" for="quarterSelect">Current quarter</label><select id="quarterSelect"><option value="1">1st quarter</option><option value="2">2nd quarter</option><option value="3">3rd quarter</option><option value="4">4th quarter</option><option value="5">Overtime</option></select></div>
+        <button id="saveGameBtn" class="btn primary">Save game details</button>
+      </div>
+      <div class="card">
+        <h2>New game</h2>
+        <p class="hint">Creates a fresh game with a new slug and starts at the home 25-yard line.</p>
+        <button id="newGameBtn" class="btn success" style="width:100%;margin-top:10px">＋ New game</button>
+      </div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <h2 style="margin-bottom:0">Existing games</h2>
+          <button id="refreshGamesBtn" class="btn small outline">Refresh</button>
+        </div>
+        <div id="gamesList" style="margin-top:8px"></div>
+      </div>
+    </section>
+
+    <section id="trackPanel" class="panel">
+      <div id="trackContent"></div>
+    </section>
+
+    <section id="rosterPanel" class="panel">
+      <div class="card">
+        <h2>Roster</h2>
+        <div class="team-toggle">
+          <button class="choice selected" data-roster-team="home">Home</button>
+          <button class="choice" data-roster-team="away">Away</button>
+        </div>
+        <div class="grid-3">
+          <div class="field"><label class="section-label" for="playerNum">No.</label><input id="playerNum" inputmode="numeric" placeholder="12" /></div>
+          <div class="field" style="grid-column:span 2"><label class="section-label" for="playerName">Name</label><input id="playerName" placeholder="Player name" /></div>
+        </div>
+        <div class="field"><label class="section-label" for="playerPos">Position</label><input id="playerPos" placeholder="QB, RB, WR..." /></div>
+        <button id="addPlayerBtn" class="btn primary" style="width:100%">Add player</button>
+      </div>
+      <div class="card"><h2 id="rosterHeading">Home players</h2><div id="rosterList"></div></div>
+    </section>
+
+    <section id="logPanel" class="panel">
+      <div class="card">
+        <h2>Play log</h2>
+        <div id="logList"></div>
+      </div>
+    </section>
+  </main>
+  <div id="toast" class="toast"></div>
+
+  <script type="module">
+    import {
+      db, gameRef, playsRef, playRef, watchGame, watchPlays,
+      setDoc, updateDoc, deleteDoc, addDoc, getDocs, serverTimestamp, collection, GAMES
+    } from "./js/firebase.js";
+    import { computeTeamStats, formatPlay } from "./js/stats.js";
+
+    const $ = (id) => document.getElementById(id);
+    const teamNames = () => ({ home: state.game?.homeName || "Home", away: state.game?.awayName || "Away" });
+    const otherTeam = (team) => team === "home" ? "away" : "home";
+    const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+    const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c]));
+    const today = () => new Date().toISOString().slice(0, 10);
+    const playerLabel = (team, id) => {
+      const p = (state.game?.rosters?.[team] || []).find((x) => x.id === id);
+      return p ? `#${p.num} ${p.name}` : "Select player";
+    };
+    const blankDraft = () => ({
+      playType: "run", yards: 0, rusher: "", passer: "", receiver: "", sackBy: "",
+      complete: true, good: true, penaltyOn: "home", penaltyYards: 5, noPlay: false,
+      touchdown: false, firstDown: false, fumble: false, intercepted: false, intBy: "", ffBy: "", tacklers: [],
+      autoFirstDown: true, autoTouchdown: true, manualFirstDown: false, manualTouchdown: false
+    });
+    const state = {
+      gameId: new URLSearchParams(location.search).get("game") || localStorage.getItem("bgsnFootballGame") || "",
+      game: null, plays: [], games: [], tab: "game", rosterTeam: "home", draft: blankDraft(),
+      stopGame: null, stopPlays: null, toastTimer: null
+    };
+
+    function toast(message, isError = false) {
+      const el = $("toast");
+      el.textContent = message;
+      el.style.border = isError ? "1px solid var(--danger)" : "1px solid var(--accent-2)";
+      el.classList.add("visible");
+      clearTimeout(state.toastTimer);
+      state.toastTimer = setTimeout(() => el.classList.remove("visible"), 3200);
+    }
+    function connection(ok, message) {
+      const el = $("statusBadge");
+      el.textContent = ok ? "Connected" : "Offline";
+      el.className = `status ${ok ? "connected" : "offline"}`;
+      if (!ok && message) toast(`Firestore: ${message}`, true);
+    }
+    function slugify(value) {
+      return String(value || "football-game").toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 42) || "football-game";
+    }
+    function newId() { return `p_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`; }
+    function updateUrl() {
+      const url = new URL(location.href);
+      if (state.gameId) url.searchParams.set("game", state.gameId); else url.searchParams.delete("game");
+      history.replaceState({}, "", url);
+      if (state.gameId) localStorage.setItem("bgsnFootballGame", state.gameId);
+      $("dashboardLink").href = state.gameId ? `dashboard.html?game=${encodeURIComponent(state.gameId)}` : "dashboard.html";
+    }
+    function gameDefaults(id, fields = {}) {
+      return {
+        name: fields.name || "New football game", date: fields.date || today(), gameId: id,
+        homeName: fields.homeName || "Home", awayName: fields.awayName || "Away",
+        rosters: { home: [], away: [] }, quarter: 1, possession: "home", down: 1, distance: 10,
+        yardLine: 25, nextSeq: 1, updatedAt: serverTimestamp()
+      };
+    }
+    function subscribeGame(id) {
+      if (state.stopGame) state.stopGame();
+      if (state.stopPlays) state.stopPlays();
+      state.game = null; state.plays = [];
+      updateUrl(); renderAll();
+      if (!id) return;
+      state.stopGame = watchGame(id, (game) => {
+        state.game = game;
+        connection(true);
+        fillGameForm();
+        renderAll();
+      }, (err) => connection(false, err.message));
+      state.stopPlays = watchPlays(id, (plays) => {
+        state.plays = plays.sort((a, b) => (a.seq || 0) - (b.seq || 0));
+        connection(true);
+        renderAll();
+      }, (err) => connection(false, err.message));
+    }
+    async function refreshGames() {
+      try {
+        const snap = await getDocs(collection(db, GAMES));
+        state.games = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+        renderGames();
+      } catch (err) { connection(false, err.message); }
+    }
+    function fillGameForm() {
+      const g = state.game || {};
+      $("gameIdInput").value = state.gameId || g.gameId || "";
+      $("gameDateInput").value = g.date || today();
+      $("gameNameInput").value = g.name || "";
+      $("homeNameInput").value = g.homeName || "";
+      $("awayNameInput").value = g.awayName || "";
+      $("quarterSelect").value = String(g.quarter || 1);
+    }
+    function renderScore() {
+      const totals = computeTeamStats(state.plays);
+      $("scoreboard").innerHTML = `<div class="score-team"><strong>${esc(state.game?.homeName || "Home")}</strong><b>${totals.home.points}</b></div><div class="score-divider">Q${state.game?.quarter || 1}</div><div class="score-team"><strong>${esc(state.game?.awayName || "Away")}</strong><b>${totals.away.points}</b></div>`;
+      const g = state.game;
+      $("gameState").innerHTML = g ? `<div class="state-box"><span>Possession</span><b>${esc((g.possession || "home").toUpperCase())}</b></div><div class="state-box"><span>Down</span><b>${g.down || 1} &amp; ${g.distance ?? 10}</b></div><div class="state-box"><span>Yard line</span><b>${g.yardLine ?? 25}</b></div>` : `<div class="empty" style="grid-column:1/-1">Create or select a game to begin.</div>`;
+    }
+    function renderGames() {
+      const el = $("gamesList");
+      if (!state.games.length) { el.innerHTML = `<div class="empty">No games found yet.</div>`; return; }
+      el.innerHTML = state.games.map((g) => `<div class="roster-item"><div class="details"><strong>${esc(g.name || g.gameId)}</strong><small>${esc(g.homeName || "Home")} vs ${esc(g.awayName || "Away")} · ${esc(g.date || "")}</small></div><button class="btn small ${g.id === state.gameId ? "success" : "outline"}" data-open-game="${esc(g.id)}">${g.id === state.gameId ? "Selected" : "Open"}</button></div>`).join("");
+      el.querySelectorAll("[data-open-game]").forEach((b) => b.addEventListener("click", () => { state.gameId = b.dataset.openGame; subscribeGame(state.gameId); }));
+    }
+    function renderTrack() {
+      const el = $("trackContent");
+      if (!state.game) { el.innerHTML = `<div class="card"><div class="empty">Select a game on the Game tab before tracking plays.</div></div>`; return; }
+      const g = state.game, d = state.draft, defense = otherTeam(g.possession || "home");
+      const team = g.possession || "home";
+      const roster = (g.rosters?.[team] || []);
+      const defRoster = (g.rosters?.[defense] || []);
+      const chips = (key, list, multi = false) => `<div class="choices">${list.length ? list.map((p) => `<button class="choice ${(multi ? d[key].includes(p.id) : d[key] === p.id) ? "selected" : ""}" data-chip="${key}" data-player="${esc(p.id)}" data-multi="${multi}">#${esc(p.num)} ${esc(p.name)}</button>`).join("") : `<span class="hint">Add players in the Roster tab.</span>`}</div>`;
+      const typeButton = (value, label) => `<button class="choice ${d.playType === value ? "selected" : ""}" data-play-type="${value}">${label}</button>`;
+      const yards = Number(d.yards) || 0;
+      el.innerHTML = `
+        <div class="card"><h2>Possession</h2><div class="possession">${["home", "away"].map((t) => `<button class="btn ${g.possession === t ? "active" : ""}" data-possession="${t}">${esc(g[t + "Name"] || t)}</button>`).join("")}</div><div class="game-state"><div class="state-box"><span>Quarter</span><b>Q${g.quarter || 1}</b></div><div class="state-box"><span>Down &amp; distance</span><b>${g.down || 1} &amp; ${g.distance ?? 10}</b></div><div class="state-box"><span>Yard line</span><b>${g.yardLine ?? 25}</b></div></div><div style="margin-top:12px"><span class="section-label">Quick field adjustment</span><div class="button-row"><button class="btn small outline" data-state-step="down:-1">Down −</button><button class="btn small outline" data-state-step="down:1">Down +</button><button class="btn small outline" data-state-step="distance:-1">To go −</button><button class="btn small outline" data-state-step="distance:1">To go +</button></div><div class="yard-adjust" style="margin-top:8px"><button class="btn outline" data-state-step="yardLine:-5">−5</button><b>${g.yardLine ?? 25}</b><button class="btn outline" data-state-step="yardLine:5">+5</button></div></div></div>
+        <div class="card"><h2>Play type</h2><div class="choices">${typeButton("run", "Run")}${typeButton("pass", "Pass")}${typeButton("sack", "Sack")}${typeButton("punt", "Punt")}${typeButton("kickoff", "Kickoff")}${typeButton("fg", "FG")}${typeButton("xp", "XP")}${typeButton("2pt", "2PT")}${typeButton("penalty", "Penalty")}${typeButton("kneel", "Kneel")}${typeButton("spike", "Spike")}</div></div>
+        ${["run", "kneel"].includes(d.playType) ? `<div class="card"><h2>Rusher</h2>${chips("rusher", roster)}</div>` : ""}
+        ${d.playType === "pass" ? `<div class="card"><h2>Pass</h2><span class="section-label">Passer</span>${chips("passer", roster)}<span class="section-label" style="margin-top:12px">Receiver</span>${chips("receiver", roster)}<span class="section-label" style="margin-top:12px">Result</span><div class="choices"><button class="choice ${d.complete ? "selected" : ""}" data-bool="complete" data-value="true">Complete</button><button class="choice ${!d.complete ? "selected" : ""}" data-bool="complete" data-value="false">Incomplete</button></div></div>` : ""}
+        ${d.playType === "sack" ? `<div class="card"><h2>Sack</h2><span class="section-label">Passer</span>${chips("passer", roster)}<span class="section-label" style="margin-top:12px">Sack by</span>${chips("sackBy", defRoster)}</div>` : ""}
+        ${["fg", "xp", "2pt"].includes(d.playType) ? `<div class="card"><h2>Kick result</h2><div class="choices"><button class="choice ${d.good ? "selected" : ""}" data-bool="good" data-value="true">${d.playType === "2pt" ? "Converted" : "Good"}</button><button class="choice ${!d.good ? "selected" : ""}" data-bool="good" data-value="false">${d.playType === "2pt" ? "Failed" : "No good"}</button></div></div>` : ""}
+        ${d.playType === "penalty" ? `<div class="card"><h2>Penalty</h2><div class="choices"><button class="choice ${d.penaltyOn === "home" ? "selected" : ""}" data-penalty-team="home">${esc(g.homeName || "Home")}</button><button class="choice ${d.penaltyOn === "away" ? "selected" : ""}" data-penalty-team="away">${esc(g.awayName || "Away")}</button></div><div class="field" style="margin-top:10px"><label class="section-label">Penalty yards</label><input id="penaltyYards" type="number" value="${d.penaltyYards}" /></div><label class="check"><input id="noPlay" type="checkbox" ${d.noPlay ? "checked" : ""}/> No play</label></div>` : ""}
+        <div class="card"><h2>Yards gained</h2><div class="quick-yards">${[-5,-3,-1,0,1,2,3,4,5,7,10,15,20,30].map((n) => `<button class="choice ${yards === n ? "selected" : ""}" data-yards="${n}">${n > 0 ? "+" : ""}${n}</button>`).join("")}</div><div class="field" style="margin-top:10px"><label class="section-label" for="yardsInput">Custom yards</label><input id="yardsInput" type="number" step="any" value="${yards}" /></div><p class="hint">First down is suggested at the line to gain. TD is suggested when the ball reaches 100.</p></div>
+        <div class="card"><h2>Results &amp; credit</h2><div class="check-row"><label class="check"><input id="touchdown" type="checkbox" ${d.touchdown ? "checked" : ""}/> Touchdown</label><label class="check"><input id="firstDown" type="checkbox" ${d.firstDown ? "checked" : ""}/> First down${d.autoFirstDown && !d.manualFirstDown ? " · suggested" : ""}</label><label class="check"><input id="fumble" type="checkbox" ${d.fumble ? "checked" : ""}/> Fumble lost</label><label class="check"><input id="intercepted" type="checkbox" ${d.intercepted ? "checked" : ""}/> Intercepted</label></div><span class="section-label" style="margin-top:12px">Tacklers (${esc(g[defense + "Name"] || defense)})</span>${chips("tacklers", defRoster, true)}${d.intercepted ? `<span class="section-label" style="margin-top:12px">Interception by</span>${chips("intBy", defRoster)}` : ""}<span class="section-label" style="margin-top:12px">Forced fumble by</span>${chips("ffBy", defRoster)}</div>
+        <div class="button-row"><button id="savePlayBtn" class="btn success">Save play</button><button id="undoBtn" class="btn outline">Undo last</button></div>
+        <div class="card" style="margin-top:12px"><h2>Last 5 plays</h2><div id="recentPlays">${recentMarkup()}</div></div>`;
+      wireTrack();
+    }
+    function recentMarkup() {
+      const recent = [...state.plays].slice(-5).reverse();
+      if (!recent.length) return `<div class="empty">No plays recorded.</div>`;
+      return recent.map((p) => { const f = formatPlay(p, state.game?.rosters, teamNames()); return `<div class="recent-row"><div class="recent-main"><strong>${esc(f.team)} · ${esc(f.situation)}</strong><small>${esc(f.desc)}${f.tags.length ? ` · ${esc(f.tags.join(" · "))}` : ""}</small></div></div>`; }).join("");
+    }
+    function setYards(value) {
+      state.draft.yards = Number(value) || 0;
+      if (!state.draft.manualFirstDown) state.draft.firstDown = state.draft.yards >= Number(state.game?.distance || 10);
+      if (!state.draft.manualTouchdown) state.draft.touchdown = Number(state.game?.yardLine || 0) + state.draft.yards >= 100;
+      renderTrack();
+    }
+    function wireTrack() {
+      document.querySelectorAll("[data-possession]").forEach((b) => b.addEventListener("click", async () => {
+        try { await updateDoc(gameRef(state.gameId), { possession: b.dataset.possession, updatedAt: serverTimestamp() }); } catch (err) { connection(false, err.message); }
+      }));
+      document.querySelectorAll("[data-state-step]").forEach((b) => b.addEventListener("click", async () => {
+        const [key, amount] = b.dataset.stateStep.split(":");
+        const value = Number(state.game[key] || 0) + Number(amount);
+        const nextValue = key === "yardLine" ? clamp(value, 0, 100) : key === "down" ? clamp(value, 1, 4) : Math.max(1, value);
+        try { await updateDoc(gameRef(state.gameId), { [key]: nextValue, updatedAt: serverTimestamp() }); } catch (err) { connection(false, err.message); toast(`State update failed: ${err.message}`, true); }
+      }));
+      document.querySelectorAll("[data-play-type]").forEach((b) => b.addEventListener("click", () => { state.draft.playType = b.dataset.playType; renderTrack(); }));
+      document.querySelectorAll("[data-yards]").forEach((b) => b.addEventListener("click", () => setYards(b.dataset.yards)));
+      document.querySelector("#yardsInput")?.addEventListener("input", (e) => { state.draft.yards = Number(e.target.value) || 0; if (!state.draft.manualFirstDown) state.draft.firstDown = state.draft.yards >= Number(state.game?.distance || 10); if (!state.draft.manualTouchdown) state.draft.touchdown = Number(state.game?.yardLine || 0) + state.draft.yards >= 100; });
+      document.querySelectorAll("[data-chip]").forEach((b) => b.addEventListener("click", () => {
+        const key = b.dataset.chip;
+        if (b.dataset.multi === "true") state.draft[key] = state.draft[key].includes(b.dataset.player) ? state.draft[key].filter((id) => id !== b.dataset.player) : [...state.draft[key], b.dataset.player];
+        else state.draft[key] = b.dataset.player;
+        renderTrack();
+      }));
+      document.querySelectorAll("[data-bool]").forEach((b) => b.addEventListener("click", () => { state.draft[b.dataset.bool] = b.dataset.value === "true"; renderTrack(); }));
+      document.querySelectorAll("[data-penalty-team]").forEach((b) => b.addEventListener("click", () => { state.draft.penaltyOn = b.dataset.penaltyTeam; renderTrack(); }));
+      $("penaltyYards")?.addEventListener("input", (e) => { state.draft.penaltyYards = Number(e.target.value) || 0; });
+      $("noPlay")?.addEventListener("change", (e) => { state.draft.noPlay = e.target.checked; });
+      $("touchdown")?.addEventListener("change", (e) => { state.draft.touchdown = e.target.checked; state.draft.manualTouchdown = true; });
+      $("firstDown")?.addEventListener("change", (e) => { state.draft.firstDown = e.target.checked; state.draft.manualFirstDown = true; });
+      $("fumble")?.addEventListener("change", (e) => { state.draft.fumble = e.target.checked; });
+      $("intercepted")?.addEventListener("change", (e) => { state.draft.intercepted = e.target.checked; });
+      $("savePlayBtn")?.addEventListener("click", savePlay);
+      $("undoBtn")?.addEventListener("click", undoLast);
+    }
+    function transitionGame(g, p) {
+      const next = { quarter: Number(p.quarter) || g.quarter || 1, possession: g.possession || p.team, down: Number(g.down) || 1, distance: Number(g.distance) || 10, yardLine: Number(g.yardLine) || 0 };
+      const flip = () => { next.possession = otherTeam(next.possession); next.down = 1; next.distance = 10; next.yardLine = clamp(100 - next.yardLine, 0, 100); };
+      if (!p.noPlay) {
+        next.yardLine = clamp(next.yardLine + (Number(p.yards) || 0), 0, 100);
+        if (p.playType === "punt" || p.playType === "kickoff" || (p.playType === "fg" && !p.good) || p.touchdown || p.turnover) flip();
+        else if (p.playType === "fg" && p.good) flip();
+        else if (p.firstDown || next.distance - (Number(p.yards) || 0) <= 0) { next.down = 1; next.distance = 10; }
+        else { next.distance -= Number(p.yards) || 0; next.down += 1; if (next.down > 4) { p.turnover = "downs"; flip(); } }
+      }
+      return next;
+    }
+    async function savePlay() {
+      if (!state.game) return toast("Select a game first.", true);
+      const g = state.game, d = state.draft, team = g.possession || "home";
+      const seq = Number(g.nextSeq) || (state.plays.length ? Math.max(...state.plays.map((p) => Number(p.seq) || 0)) + 1 : 1);
+      const yards = Number(d.yards) || 0;
+      const p = {
+        seq, team, quarter: Number(g.quarter) || 1, playType: d.playType, down: Number(g.down) || 1,
+        distance: Number(g.distance) || 10, yardLine: Number(g.yardLine) || 0, yards,
+        complete: d.playType === "pass" ? d.complete : undefined, passer: d.passer || undefined, rusher: d.rusher || undefined,
+        receiver: d.receiver || undefined, sackBy: d.sackBy || undefined, tacklers: d.tacklers,
+        touchdown: !!d.touchdown, firstDown: !!d.firstDown, turnover: d.intercepted ? "int" : d.fumble ? "fumble" : null,
+        intBy: d.intBy || undefined, ffBy: d.ffBy || undefined, good: ["fg", "xp", "2pt"].includes(d.playType) ? !!d.good : undefined,
+        penaltyOn: d.playType === "penalty" ? d.penaltyOn : undefined, penaltyYards: d.playType === "penalty" ? Number(d.penaltyYards) || 0 : undefined,
+        noPlay: d.playType === "penalty" ? !!d.noPlay : false, ts: serverTimestamp(),
+        stateBefore: { quarter: g.quarter || 1, possession: g.possession || "home", down: g.down || 1, distance: g.distance || 10, yardLine: g.yardLine ?? 25 }
+      };
+      Object.keys(p).forEach((key) => { if (p[key] === undefined) delete p[key]; });
+      const next = transitionGame(g, p);
+      p.stateAfter = next;
+      try {
+        await addDoc(playsRef(state.gameId), p);
+        await updateDoc(gameRef(state.gameId), { ...next, nextSeq: seq + 1, updatedAt: serverTimestamp() });
+        toast(`Saved Q${p.quarter} ${p.playType} play`);
+        state.draft = blankDraft();
+      } catch (err) { connection(false, err.message); toast(`Save failed: ${err.message}`, true); }
+    }
+    async function undoLast() {
+      const last = state.plays[state.plays.length - 1];
+      if (!last || !state.game) return toast("There is no play to undo.", true);
+      try {
+        await deleteDoc(playRef(state.gameId, last.id));
+        const before = last.stateBefore || { quarter: state.game.quarter || 1, possession: state.game.possession || "home", down: state.game.down || 1, distance: state.game.distance || 10, yardLine: state.game.yardLine || 25 };
+        await updateDoc(gameRef(state.gameId), { ...before, nextSeq: Number(last.seq) || state.game.nextSeq || 1, updatedAt: serverTimestamp() });
+        toast("Last play undone");
+      } catch (err) { connection(false, err.message); toast(`Undo failed: ${err.message}`, true); }
+    }
+    function renderRoster() {
+      const team = state.rosterTeam, list = state.game?.rosters?.[team] || [];
+      $("rosterHeading").textContent = `${state.game?.[team + "Name"] || team} players`;
+      document.querySelectorAll("[data-roster-team]").forEach((b) => b.classList.toggle("selected", b.dataset.rosterTeam === team));
+      $("rosterList").innerHTML = state.game ? (list.length ? list.map((p) => `<div class="roster-item"><div class="details"><strong>#${esc(p.num)} ${esc(p.name)}</strong><small>${esc(p.pos || "Position not set")}</small></div><button class="btn small outline" data-edit-player="${esc(p.id)}">Edit</button><button class="btn small danger" data-delete-player="${esc(p.id)}">Delete</button></div>`).join("") : `<div class="empty">No players yet.</div>`) : `<div class="empty">Select a game first.</div>`;
+      document.querySelectorAll("[data-edit-player]").forEach((b) => b.addEventListener("click", () => editPlayer(b.dataset.editPlayer)));
+      document.querySelectorAll("[data-delete-player]").forEach((b) => b.addEventListener("click", () => deletePlayer(b.dataset.deletePlayer)));
+    }
+    async function writeRosters(rosters) {
+      try { await updateDoc(gameRef(state.gameId), { rosters, updatedAt: serverTimestamp() }); toast("Roster updated"); } catch (err) { connection(false, err.message); toast(`Roster update failed: ${err.message}`, true); }
+    }
+    async function addPlayer() {
+      if (!state.game) return toast("Select a game first.", true);
+      const num = $("playerNum").value.trim(), name = $("playerName").value.trim(), pos = $("playerPos").value.trim();
+      if (!name) return toast("Enter a player name.", true);
+      const rosters = structuredClone(state.game.rosters || { home: [], away: [] });
+      rosters[state.rosterTeam].push({ id: newId(), num, name, pos });
+      await writeRosters(rosters);
+      $("playerNum").value = ""; $("playerName").value = ""; $("playerPos").value = "";
+    }
+    async function editPlayer(id) {
+      const p = (state.game?.rosters?.[state.rosterTeam] || []).find((x) => x.id === id);
+      if (!p) return;
+      const name = prompt("Player name:", p.name); if (name === null) return;
+      const num = prompt("Jersey number:", p.num); if (num === null) return;
+      const pos = prompt("Position:", p.pos || ""); if (pos === null) return;
+      const rosters = structuredClone(state.game.rosters); const target = rosters[state.rosterTeam].find((x) => x.id === id);
+      Object.assign(target, { name: name.trim() || p.name, num: num.trim(), pos: pos.trim() }); await writeRosters(rosters);
+    }
+    async function deletePlayer(id) {
+      if (!confirm("Delete this player from the roster?")) return;
+      const rosters = structuredClone(state.game.rosters); rosters[state.rosterTeam] = rosters[state.rosterTeam].filter((p) => p.id !== id); await writeRosters(rosters);
+    }
+    function renderLog() {
+      const el = $("logList");
+      if (!state.plays.length) { el.innerHTML = `<div class="empty">No plays recorded.</div>`; return; }
+      el.innerHTML = [...state.plays].reverse().map((p) => { const f = formatPlay(p, state.game?.rosters, teamNames()); return `<div class="log-row"><div class="log-main"><strong>#${p.seq} · ${esc(f.team)} · ${esc(f.situation)}</strong><small>${esc(f.desc)}${f.tags.length ? ` · ${esc(f.tags.join(" · "))}` : ""}</small></div><button class="btn small outline" data-edit-play="${esc(p.id)}">Edit</button><button class="btn small danger" data-delete-play="${esc(p.id)}">Delete</button></div>`; }).join("");
+      document.querySelectorAll("[data-edit-play]").forEach((b) => b.addEventListener("click", () => editPlay(b.dataset.editPlay)));
+      document.querySelectorAll("[data-delete-play]").forEach((b) => b.addEventListener("click", () => deletePlay(b.dataset.deletePlay)));
+    }
+    async function editPlay(id) {
+      const p = state.plays.find((x) => x.id === id); if (!p) return;
+      const yards = prompt("Yards gained:", p.yards); if (yards === null) return;
+      const td = confirm("Mark this play as a touchdown? Cancel leaves its current touchdown value.");
+      const first = confirm("Mark this play as a first down? Cancel leaves its current first-down value.");
+      try { await updateDoc(playRef(state.gameId, id), { yards: Number(yards) || 0, touchdown: td ? true : p.touchdown, firstDown: first ? true : p.firstDown, updatedAt: serverTimestamp() }); toast("Play updated (game state was not recalculated)"); } catch (err) { connection(false, err.message); toast(`Edit failed: ${err.message}`, true); }
+    }
+    async function deletePlay(id) {
+      if (!confirm("Delete this play? Game state will not be recalculated.")) return;
+      try { await deleteDoc(playRef(state.gameId, id)); toast("Play deleted"); } catch (err) { connection(false, err.message); toast(`Delete failed: ${err.message}`, true); }
+    }
+    function renderAll() {
+      renderScore(); renderGames(); renderRoster(); renderLog();
+      if (state.tab === "track") renderTrack();
+      document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === `${state.tab}Panel`));
+      document.querySelectorAll(".tab[data-tab]").forEach((b) => b.classList.toggle("active", b.dataset.tab === state.tab));
+    }
+    async function saveGameDetails() {
+      const id = state.game ? state.gameId : ($("gameIdInput").value.trim() || state.gameId);
+      if (!id) return toast("Enter a game ID or use New game.", true);
+      const fields = { name: $("gameNameInput").value.trim() || "Football game", date: $("gameDateInput").value || today(), homeName: $("homeNameInput").value.trim() || "Home", awayName: $("awayNameInput").value.trim() || "Away" };
+      try {
+        if (!state.game) await setDoc(gameRef(id), gameDefaults(id, fields));
+        else await updateDoc(gameRef(state.gameId), { ...fields, gameId: state.gameId, updatedAt: serverTimestamp() });
+        state.gameId = id; subscribeGame(id); await refreshGames(); toast("Game details saved");
+      } catch (err) { connection(false, err.message); toast(`Game save failed: ${err.message}`, true); }
+    }
+    async function createNewGame() {
+      const name = prompt("Game name:", "Friday night football"); if (name === null) return;
+      const homeName = prompt("Home team:", "Home"); if (homeName === null) return;
+      const awayName = prompt("Away team:", "Away"); if (awayName === null) return;
+      let id = `${slugify(name)}-${Date.now().toString(36).slice(-5)}`;
+      try { await setDoc(gameRef(id), gameDefaults(id, { name: name.trim() || "Football game", homeName: homeName.trim() || "Home", awayName: awayName.trim() || "Away", date: today() })); state.gameId = id; subscribeGame(id); await refreshGames(); toast("New game created"); } catch (err) { connection(false, err.message); toast(`New game failed: ${err.message}`, true); }
+    }
+    $("gameDateInput").value = today();
+    document.querySelectorAll(".tab[data-tab]").forEach((b) => b.addEventListener("click", () => { state.tab = b.dataset.tab; renderAll(); }));
+    document.querySelectorAll("[data-roster-team]").forEach((b) => b.addEventListener("click", () => { state.rosterTeam = b.dataset.rosterTeam; renderRoster(); }));
+    $("saveGameBtn").addEventListener("click", saveGameDetails);
+    $("quarterSelect").addEventListener("change", async (event) => {
+      if (!state.game) return;
+      try { await updateDoc(gameRef(state.gameId), { quarter: Number(event.target.value), updatedAt: serverTimestamp() }); } catch (err) { connection(false, err.message); toast(`Quarter update failed: ${err.message}`, true); }
+    });
+    $("newGameBtn").addEventListener("click", createNewGame);
+    $("refreshGamesBtn").addEventListener("click", refreshGames);
+    $("addPlayerBtn").addEventListener("click", addPlayer);
+    fillGameForm(); updateUrl(); renderAll(); refreshGames(); subscribeGame(state.gameId);
+  </script>
+</body>
+</html>
