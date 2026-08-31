@@ -311,6 +311,12 @@
         <div class="card" style="margin-top:12px"><h2>Last 5 plays</h2><div id="recentPlays">${recentMarkup()}</div></div>`;
       wireTrack();
     }
+    function isTrackTypingTarget(element) {
+      if (!element || !document.getElementById("trackPanel")?.contains(element)) return false;
+      if (element.matches("textarea, select")) return true;
+      if (!element.matches("input")) return false;
+      return !["button", "submit", "checkbox", "radio"].includes((element.type || "text").toLowerCase());
+    }
     function recentMarkup() {
       const recent = [...state.plays].slice(-5).reverse();
       if (!recent.length) return `<div class="empty">No plays recorded.</div>`;
@@ -387,8 +393,10 @@
       try {
         await addDoc(playsRef(state.gameId), p);
         await updateDoc(gameRef(state.gameId), { ...next, nextSeq: seq + 1, updatedAt: serverTimestamp() });
+        state.game = { ...state.game, ...next, nextSeq: seq + 1 };
         toast(`Saved Q${p.quarter} ${p.playType} play`);
         state.draft = blankDraft();
+        renderTrack();
       } catch (err) { connection(false, err.message); toast(`Save failed: ${err.message}`, true); }
     }
     async function undoLast() {
@@ -398,7 +406,9 @@
         await deleteDoc(playRef(state.gameId, last.id));
         const before = last.stateBefore || { quarter: state.game.quarter || 1, possession: state.game.possession || "home", down: state.game.down || 1, distance: state.game.distance || 10, yardLine: state.game.yardLine || 25 };
         await updateDoc(gameRef(state.gameId), { ...before, nextSeq: Number(last.seq) || state.game.nextSeq || 1, updatedAt: serverTimestamp() });
+        state.game = { ...state.game, ...before, nextSeq: Number(last.seq) || state.game.nextSeq || 1 };
         toast("Last play undone");
+        renderTrack();
       } catch (err) { connection(false, err.message); toast(`Undo failed: ${err.message}`, true); }
     }
     function renderRoster() {
@@ -455,7 +465,7 @@
     function renderAll() {
       renderScore(); renderGames(); renderRoster(); renderLog();
       if (state.tab === "track") {
-        if (document.getElementById("trackPanel")?.contains(document.activeElement)) state.trackRefreshPending = true;
+        if (isTrackTypingTarget(document.activeElement)) state.trackRefreshPending = true;
         else renderTrack();
       }
       document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === `${state.tab}Panel`));
