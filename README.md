@@ -78,7 +78,9 @@ Fields such as passer, receiver, completion, kick result, penalty details, inter
 
 ## Firestore rules
 
-The existing Firebase project's rules may not cover the new `footballGames` collection. This is a required setup step before live writes will work. In Firebase Console → Firestore Database → Rules, paste and publish:
+No Firestore rules change is required today. The current rules in the `bgsn-scoreboard` project already allow the tracker to read and write `footballGames`, and those existing rules also protect the overlay, soundboard, and scorestream collections.
+
+If the project rules are tightened later, add a block like this **alongside the existing match blocks**. Do not replace the whole ruleset:
 
 ```text
 rules_version = '2';
@@ -96,6 +98,6 @@ service cloud.firestore {
 }
 ```
 
-These open rules are convenient for an internal scoreboard prototype but are not appropriate for a public production application. Add authentication and restrict access before using the tracker with sensitive data.
+These fully-open rules are convenient for an internal scoreboard prototype but are not appropriate for a public production application. Add authentication and restrict access before using the tracker with sensitive data.
 
-If rules are not published, the UI reports Firestore errors through the red connection badge and visible error toasts; it does not silently treat a rejected write as successful.
+If a future rules change rejects a request, the UI reports Firestore errors through the red connection badge and visible error toasts; it does not silently treat a rejected write as successful.

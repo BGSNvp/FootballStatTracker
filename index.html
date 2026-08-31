@@ -203,7 +203,7 @@
     });
     const state = {
       gameId: new URLSearchParams(location.search).get("game") || localStorage.getItem("bgsnFootballGame") || "",
-      game: null, plays: [], games: [], tab: "game", rosterTeam: "home", draft: blankDraft(),
+      game: null, plays: [], games: [], tab: "game", rosterTeam: "home", draft: blankDraft(), trackRefreshPending: false,
       stopGame: null, stopPlays: null, toastTimer: null
     };
 
@@ -288,6 +288,7 @@
     }
     function renderTrack() {
       const el = $("trackContent");
+      state.trackRefreshPending = false;
       if (!state.game) { el.innerHTML = `<div class="card"><div class="empty">Select a game on the Game tab before tracking plays.</div></div>`; return; }
       const g = state.game, d = state.draft, defense = otherTeam(g.possession || "home");
       const team = g.possession || "home";
@@ -353,12 +354,13 @@
     }
     function transitionGame(g, p) {
       const next = { quarter: Number(p.quarter) || g.quarter || 1, possession: g.possession || p.team, down: Number(g.down) || 1, distance: Number(g.distance) || 10, yardLine: Number(g.yardLine) || 0 };
-      const flip = () => { next.possession = otherTeam(next.possession); next.down = 1; next.distance = 10; next.yardLine = clamp(100 - next.yardLine, 0, 100); };
+      const flip = () => { next.possession = otherTeam(next.possession); next.down = 1; next.yardLine = clamp(100 - next.yardLine, 0, 100); next.distance = Math.min(10, 100 - next.yardLine); };
       if (!p.noPlay) {
         next.yardLine = clamp(next.yardLine + (Number(p.yards) || 0), 0, 100);
-        if (p.playType === "punt" || p.playType === "kickoff" || (p.playType === "fg" && !p.good) || p.touchdown || p.turnover) flip();
+        if (p.touchdown) { next.yardLine = 98; next.down = 1; next.distance = 2; }
+        else if (p.playType === "xp" || p.playType === "2pt" || p.playType === "punt" || p.playType === "kickoff" || (p.playType === "fg" && !p.good) || p.turnover) flip();
         else if (p.playType === "fg" && p.good) flip();
-        else if (p.firstDown || next.distance - (Number(p.yards) || 0) <= 0) { next.down = 1; next.distance = 10; }
+        else if (p.firstDown || next.distance - (Number(p.yards) || 0) <= 0) { next.down = 1; next.distance = Math.min(10, 100 - next.yardLine); }
         else { next.distance -= Number(p.yards) || 0; next.down += 1; if (next.down > 4) { p.turnover = "downs"; flip(); } }
       }
       return next;
@@ -452,7 +454,10 @@
     }
     function renderAll() {
       renderScore(); renderGames(); renderRoster(); renderLog();
-      if (state.tab === "track") renderTrack();
+      if (state.tab === "track") {
+        if (document.getElementById("trackPanel")?.contains(document.activeElement)) state.trackRefreshPending = true;
+        else renderTrack();
+      }
       document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === `${state.tab}Panel`));
       document.querySelectorAll(".tab[data-tab]").forEach((b) => b.classList.toggle("active", b.dataset.tab === state.tab));
     }
@@ -484,6 +489,9 @@
     $("newGameBtn").addEventListener("click", createNewGame);
     $("refreshGamesBtn").addEventListener("click", refreshGames);
     $("addPlayerBtn").addEventListener("click", addPlayer);
+    $("trackPanel").addEventListener("focusout", (event) => {
+      if (!event.currentTarget.contains(event.relatedTarget) && state.trackRefreshPending) renderTrack();
+    });
     fillGameForm(); updateUrl(); renderAll(); refreshGames(); subscribeGame(state.gameId);
   </script>
 </body>
