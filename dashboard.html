@@ -153,6 +153,13 @@
       <table class="cmp"><tbody id="cmpBody"></tbody></table>
     </div>
 
+    <div class="card" style="grid-column: 1 / -1;">
+      <h2>Charting tendencies</h2>
+      <select id="chartField" aria-label="Charting dimension"></select>
+      <div class="scroll" id="chartHome"></div>
+      <div class="scroll" id="chartAway"></div>
+    </div>
+
     <div class="card">
       <h2>Player leaders <span class="teamtag home" id="plHomeTag">Home</span></h2>
       <div class="subtabs" data-side="home">
@@ -191,7 +198,8 @@
 import { watchGame, watchPlays, GAMES, collection, getDocs, db } from "./js/firebase.js";
 import {
   computeTeamStats, computePlayerStats, computeDrives, computeQuarterTrends,
-  computeMomentum, computeDownSplits, computeTypeSplits, trendNotes, formatPlay
+  computeMomentum, computeDownSplits, computeTypeSplits, trendNotes, formatPlay,
+  CHART_FIELDS, chartFieldsWithData, computeChartSplits, computePlayerChartSplits
 } from "./js/stats.js";
 
 const HOME_COLOR = "#4c9ffe";
@@ -204,8 +212,10 @@ let plays = [];
 let unsubGame = null;
 let unsubPlays = null;
 const cat = { home: "rush", away: "rush" };
+let chartField = "player";
 
 const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const teamNames = () => ({
   home: (game && game.homeName) || "Home",
   away: (game && game.awayName) || "Away"
@@ -427,6 +437,36 @@ function renderPlayers() {
   $("plAway").innerHTML = playerTable(playerStats.away, cat.away);
 }
 
+function renderChartSplits() {
+  const playerSplits = computePlayerChartSplits(plays, rosters());
+  const hasPlayer = [...playerSplits.home, ...playerSplits.away].some((row) => row.value !== "Unassigned");
+  const dimensions = [
+    ...(hasPlayer ? [{ key: "player", label: "Player" }] : []),
+    ...chartFieldsWithData(plays).map((key) => CHART_FIELDS.find((field) => field.key === key))
+  ];
+  const select = $("chartField");
+  select.innerHTML = dimensions.map(({ key, label }) => `<option value="${esc(key)}">${esc(label)}</option>`).join("");
+  if (!dimensions.length) {
+    chartField = "player";
+    select.style.display = "none";
+    $("chartHome").innerHTML = '<div class="empty">No charting data yet.</div>';
+    $("chartAway").innerHTML = "";
+    return;
+  }
+  if (!dimensions.some(({ key }) => key === chartField)) chartField = dimensions[0].key;
+  select.value = chartField;
+  select.style.display = "";
+  const splits = chartField === "player" ? playerSplits : computeChartSplits(plays, chartField);
+  const table = (side) => {
+    const rows = splits[side];
+    if (!rows.length) return '<div class="empty">No charting data yet.</div>';
+    return `<table><thead><tr><th>Value</th><th>Plays</th><th>Run</th><th>Pass</th><th>Avg yds</th><th>Succ%</th><th>TD</th><th>1st</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${esc(row.value)}</td><td>${row.plays}</td><td>${row.run}</td><td>${row.pass}</td><td>${f1(row.ypp)}</td><td>${pct(row.successRate)}</td><td>${row.td}</td><td>${row.firstDowns}</td></tr>`).join("")}</tbody></table>`;
+  };
+  const names = teamNames();
+  $("chartHome").innerHTML = `<span class="teamtag home">${esc(names.home)}</span>${table("home")}`;
+  $("chartAway").innerHTML = `<span class="teamtag away">${esc(names.away)}</span>${table("away")}`;
+}
+
 function renderDrives() {
   const drives = computeDrives(plays);
   const names = teamNames();
@@ -566,11 +606,17 @@ function renderAll() {
   renderHeader(totals);
   renderNotes();
   renderComparison(totals);
+  renderChartSplits();
   renderPlayers();
   renderDrives();
   renderLog();
   renderCharts(totals);
 }
+
+$("chartField").addEventListener("change", (e) => {
+  chartField = e.target.value;
+  renderChartSplits();
+});
 
 /* ---------- live subscriptions ---------- */
 function subscribe() {

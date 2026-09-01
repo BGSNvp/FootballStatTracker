@@ -152,7 +152,8 @@
 import { getDoc, getDocs, query, orderBy, collection, gameRef, playsRef, GAMES, db } from "./js/firebase.js";
 import {
   computeTeamStats, computePlayerStats, computeDrives, computeQuarterTrends,
-  computeMomentum, computeDownSplits, computeTypeSplits, trendNotes, formatPlay
+  computeMomentum, computeDownSplits, computeTypeSplits, trendNotes, formatPlay,
+  CHART_FIELDS, chartFieldsWithData, computeChartSplits, computePlayerChartSplits
 } from "./js/stats.js";
 
 const HOME_COLOR = "#14508c";
@@ -365,6 +366,37 @@ function tendencyTable(plays) {
   </div>`;
 }
 
+function chartTendencySection(plays) {
+  const names = teamNames();
+  const playerSplits = computePlayerChartSplits(plays, rosters());
+  const hasPlayer = [...playerSplits.home, ...playerSplits.away].some((row) => row.value !== "Unassigned");
+  const fields = [
+    ...(hasPlayer ? [{ key: "player", label: "Player" }] : []),
+    ...chartFieldsWithData(plays).map((key) => CHART_FIELDS.find((field) => field.key === key))
+  ];
+  if (!fields.length) return "";
+  const cols = [
+    ["Value", (row) => esc(row.value)],
+    ["Plays", (row) => row.plays],
+    ["Run", (row) => row.run],
+    ["Pass", (row) => row.pass],
+    ["Avg yds", (row) => f1(row.ypp)],
+    ["Succ%", (row) => pct(row.successRate)],
+    ["TD", (row) => row.td],
+    ["1st", (row) => row.firstDowns]
+  ];
+  return `<section class="page-break">
+    <h2>Charting tendencies</h2>
+    ${fields.map(({ key, label }) => {
+      const splits = key === "player" ? playerSplits : computeChartSplits(plays, key);
+      return `<div class="cols2">
+        <div class="teamblock home"><h3>${esc(label)} — ${esc(names.home)}</h3>${miniTable(cols, splits.home)}</div>
+        <div class="teamblock away"><h3>${esc(label)} — ${esc(names.away)}</h3>${miniTable(cols, splits.away)}</div>
+      </div>`;
+    }).join("")}
+  </section>`;
+}
+
 const CMP_ROWS = [
   ["Points", (t) => t.points, 0],
   ["Total yards", (t) => t.totalYards, 0],
@@ -466,9 +498,10 @@ function playLogTable(plays) {
       <td><span class="teamtag ${p.team}">${esc(f.team)}</span></td>
       <td>${esc(f.situation)}</td>
       <td style="text-align:left;white-space:normal">${esc(f.desc)} ${f.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join(" ")}</td>
+      <td style="text-align:left;white-space:normal">${esc(f.chartText)}</td>
     </tr>`;
   }).join("");
-  return `<table><thead><tr><th>#</th><th>Qtr</th><th>Team</th><th>Situation</th><th style="text-align:left">Play</th></tr></thead>
+  return `<table><thead><tr><th>#</th><th>Qtr</th><th>Team</th><th>Situation</th><th style="text-align:left">Play</th><th style="text-align:left">Charting</th></tr></thead>
     <tbody>${rows}</tbody></table>`;
 }
 
@@ -550,6 +583,8 @@ function fullReport(totals, plays) {
       <h2>Tendencies by down</h2>
       ${tendencyTable(plays)}
     </section>
+
+    ${chartTendencySection(plays)}
 
     <section class="page-break">
       <h2>Player statistics</h2>
