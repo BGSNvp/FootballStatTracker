@@ -24,10 +24,33 @@
  *   penaltyOn  'home'|'away'
  *   penaltyYards number
  *   noPlay     bool     penalty wiped the play out (excluded from totals)
+ *   chart      map      optional coach charting labels
  */
 
 export const OFFENSE_TYPES = ["run", "pass", "sack", "kneel", "spike"];
 export const SCRIMMAGE_TYPES = ["run", "pass", "sack"];
+export const CHART_FIELDS = [
+  { key: "hash", label: "Hash" },
+  { key: "personnel", label: "Personnel" },
+  { key: "formation", label: "Formation" },
+  { key: "direction", label: "Direction" },
+  { key: "motion", label: "Motion" },
+  { key: "call1", label: "Play call 1" },
+  { key: "call2", label: "Play call 2" },
+  { key: "type", label: "Type" },
+  { key: "result", label: "Result" }
+];
+export const DEFAULT_CHART_OPTIONS = {
+  hash: ["L", "M", "R"],
+  personnel: ["3", "4", "6", "7", "9", "10", "11", "12", "20", "21", "22", "23", "88", "X"],
+  formation: ["Spread", "Inlaw", "Outlaw", "Senior", "Twins", "Deuce", "Trips", "Eye"],
+  direction: ["Left", "Middle", "Right"],
+  motion: ["None", "Freak", "Flea", "Roar", "Lion", "Razor", "Laser", "Jet", "Orbit", "Shift", "Trade"],
+  call1: ["Mastiff", "Mohawk", "Meow", "Mustang", "Mouse", "Seminole", "Siamese", "Stallion", "Flood", "Smash", "Hitches", "Outs", "Slants", "Curls", "Fades"],
+  call2: ["Peek", "Clear", "Glance", "67", "Curls", "Hitches"],
+  type: ["Run", "Pass", "RPO", "Screen", "Play action", "QB"],
+  result: ["Run", "Com", "Inc", "Int", "Scr", "Fum", "Sack", "TFL", "TD", "Penalty"]
+};
 
 const num = (v) => (typeof v === "number" && isFinite(v) ? v : 0);
 
@@ -430,6 +453,64 @@ export function computeTypeSplits(plays) {
   return out;
 }
 
+function chartRows(plays, valueFor) {
+  const groups = { home: new Map(), away: new Map() };
+  plays.forEach((p) => {
+    if (!isCountedPlay(p) || !groups[p.team]) return;
+    const value = valueFor(p);
+    if (!value) return;
+    const rows = groups[p.team];
+    if (!rows.has(value)) rows.set(value, { value, plays: 0, yards: 0, ypp: 0, run: 0, pass: 0, success: 0, successRate: 0, td: 0, firstDowns: 0 });
+    const row = rows.get(value);
+    row.plays += 1;
+    row.yards += num(p.yards);
+    if (p.playType === "run") row.run += 1; else row.pass += 1;
+    if (isSuccessful(p)) row.success += 1;
+    if (p.touchdown) row.td += 1;
+    if (p.firstDown) row.firstDowns += 1;
+  });
+  const finish = (rows) => [...rows.values()]
+    .map((row) => ({ ...row, ypp: row.yards / row.plays, successRate: (100 * row.success) / row.plays }))
+    .sort((a, b) => b.plays - a.plays || a.value.localeCompare(b.value));
+  return { home: finish(groups.home), away: finish(groups.away) };
+}
+
+/** Tendency splits for one chart field, counted scrimmage plays only. */
+export function computeChartSplits(plays, field) {
+  return chartRows(plays, (p) => {
+    const value = p.chart && p.chart[field];
+    return value === undefined || value === null || String(value).trim() === "" ? "" : String(value);
+  });
+}
+
+/** Which chart fields appear on at least one counted play. */
+export function chartFieldsWithData(plays) {
+  return CHART_FIELDS.filter(({ key }) => plays.some((p) =>
+    isCountedPlay(p) && p.chart && p.chart[key] !== undefined && p.chart[key] !== null && String(p.chart[key]).trim() !== ""
+  )).map(({ key }) => key);
+}
+
+function primaryChartPlayer(p) {
+  if (p.playType === "run" || p.playType === "kneel" || p.playType === "spike") return p.rusher;
+  if (p.playType === "pass") return p.complete ? p.receiver : p.passer;
+  if (p.playType === "sack") return p.passer;
+  return "";
+}
+
+/** Tendency splits grouped by each play's primary ball-handler. */
+export function computePlayerChartSplits(plays, rosters) {
+  const rosterIndex = { home: {}, away: {} };
+  ["home", "away"].forEach((team) => {
+    ((rosters && rosters[team]) || []).forEach((player) => { rosterIndex[team][player.id] = player; });
+  });
+  return chartRows(plays, (p) => {
+    const id = primaryChartPlayer(p);
+    if (!id) return "Unassigned";
+    const player = rosterIndex[p.team] && rosterIndex[p.team][id];
+    return player ? `#${player.num} ${player.name}`.trim() : String(id);
+  });
+}
+
 /** One-line English summary of each team's current trend. */
 export function trendNotes(plays, teamNames) {
   const mom = computeMomentum(plays);
@@ -491,5 +572,10 @@ export function formatPlay(p, rosters, teamNames) {
   if (p.turnover === "fumble") tags.push("FUMBLE LOST");
   if (p.turnover === "downs") tags.push("turnover on downs");
   if (p.noPlay) tags.push("no play");
-  return { team, situation, desc, tags };
+  const chartText = CHART_FIELDS
+    .map(({ key }) => p.chart && p.chart[key])
+    .filter((value) => value !== undefined && value !== null && String(value).trim() !== "")
+    .map((value) => String(value))
+    .join(" · ");
+  return { team, situation, desc, tags, chartText };
 }

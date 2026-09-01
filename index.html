@@ -135,6 +135,12 @@
         <button id="saveGameBtn" class="btn primary">Save game details</button>
       </div>
       <div class="card">
+        <h2>Play charting presets</h2>
+        <p class="hint">Comma-separated choices appear as quick-tap chips on the Track tab.</p>
+        <div id="chartPresetFields"></div>
+        <button id="saveChartPresetsBtn" class="btn primary">Save presets</button>
+      </div>
+      <div class="card">
         <h2>New game</h2>
         <p class="hint">Creates a fresh game with a new slug and starts at the home 25-yard line.</p>
         <button id="newGameBtn" class="btn success" style="width:100%;margin-top:10px">＋ New game</button>
@@ -183,7 +189,7 @@
       db, gameRef, playsRef, playRef, watchGame, watchPlays,
       setDoc, updateDoc, deleteDoc, addDoc, getDocs, serverTimestamp, collection, GAMES
     } from "./js/firebase.js";
-    import { computeTeamStats, formatPlay } from "./js/stats.js";
+    import { computeTeamStats, formatPlay, CHART_FIELDS, DEFAULT_CHART_OPTIONS } from "./js/stats.js";
 
     const $ = (id) => document.getElementById(id);
     const teamNames = () => ({ home: state.game?.homeName || "Home", away: state.game?.awayName || "Away" });
@@ -195,11 +201,34 @@
       const p = (state.game?.rosters?.[team] || []).find((x) => x.id === id);
       return p ? `#${p.num} ${p.name}` : "Select player";
     };
+    function normalizeChartOptions(source) {
+      const fallback = DEFAULT_CHART_OPTIONS;
+      return Object.fromEntries(CHART_FIELDS.map(({ key }) => {
+        const values = source && Array.isArray(source[key]) ? source[key] : fallback[key];
+        return [key, [...new Set(values.map((value) => String(value).trim()).filter(Boolean))]];
+      }));
+    }
+    function storedChartOptions() {
+      try {
+        const raw = JSON.parse(localStorage.getItem("bgsnChartOptions") || "null");
+        return raw && typeof raw === "object" ? normalizeChartOptions(raw) : normalizeChartOptions(DEFAULT_CHART_OPTIONS);
+      } catch (err) {
+        return normalizeChartOptions(DEFAULT_CHART_OPTIONS);
+      }
+    }
+    function currentChartOptions() {
+      return normalizeChartOptions(state.game?.chartOptions || storedChartOptions());
+    }
+    function renderChartPresetFields() {
+      $("chartPresetFields").innerHTML = CHART_FIELDS.map(({ key, label }) =>
+        `<div class="field"><label class="section-label" for="chartOption-${esc(key)}">${esc(label)}</label><input id="chartOption-${esc(key)}" placeholder="${esc(DEFAULT_CHART_OPTIONS[key].join(", "))}" /></div>`
+      ).join("");
+    }
     const blankDraft = () => ({
       playType: "run", yards: 0, rusher: "", passer: "", receiver: "", sackBy: "",
       complete: true, good: true, penaltyOn: "home", penaltyYards: 5, noPlay: false,
       touchdown: false, firstDown: false, fumble: false, intercepted: false, intBy: "", ffBy: "", tacklers: [],
-      autoFirstDown: true, autoTouchdown: true, manualFirstDown: false, manualTouchdown: false
+      autoFirstDown: true, autoTouchdown: true, manualFirstDown: false, manualTouchdown: false, chart: {}
     });
     const state = {
       gameId: new URLSearchParams(location.search).get("game") || localStorage.getItem("bgsnFootballGame") || "",
@@ -237,7 +266,7 @@
         name: fields.name || "New football game", date: fields.date || today(), gameId: id,
         homeName: fields.homeName || "Home", awayName: fields.awayName || "Away",
         rosters: { home: [], away: [] }, quarter: 1, possession: "home", down: 1, distance: 10,
-        yardLine: 25, nextSeq: 1, updatedAt: serverTimestamp()
+        yardLine: 25, nextSeq: 1, chartOptions: storedChartOptions(), updatedAt: serverTimestamp()
       };
     }
     function subscribeGame(id) {
@@ -273,6 +302,11 @@
       $("homeNameInput").value = g.homeName || "";
       $("awayNameInput").value = g.awayName || "";
       $("quarterSelect").value = String(g.quarter || 1);
+      const options = currentChartOptions();
+      CHART_FIELDS.forEach(({ key }) => {
+        const input = $(`chartOption-${key}`);
+        if (input) input.value = options[key].join(", ");
+      });
     }
     function renderScore() {
       const totals = computeTeamStats(state.plays);
@@ -294,11 +328,16 @@
       const team = g.possession || "home";
       const roster = (g.rosters?.[team] || []);
       const defRoster = (g.rosters?.[defense] || []);
+      const chartOptions = currentChartOptions();
       const chips = (key, list, multi = false) => `<div class="choices">${list.length ? list.map((p) => `<button class="choice ${(multi ? d[key].includes(p.id) : d[key] === p.id) ? "selected" : ""}" data-chip="${key}" data-player="${esc(p.id)}" data-multi="${multi}">#${esc(p.num)} ${esc(p.name)}</button>`).join("") : `<span class="hint">Add players in the Roster tab.</span>`}</div>`;
       const typeButton = (value, label) => `<button class="choice ${d.playType === value ? "selected" : ""}" data-play-type="${value}">${label}</button>`;
+      const chartMarkup = CHART_FIELDS.some(({ key }) => chartOptions[key].length)
+        ? `<div class="card"><h2>Charting</h2>${CHART_FIELDS.filter(({ key }) => chartOptions[key].length).map(({ key, label }) => `<span class="section-label">${esc(label)}</span><div class="choices">${chartOptions[key].map((value) => `<button class="choice ${d.chart?.[key] === value ? "selected" : ""}" data-chart-field="${esc(key)}" data-chart-value="${esc(value)}">${esc(value)}</button>`).join("")}</div>`).join("")}</div>`
+        : `<div class="card"><h2>Charting</h2><div class="hint">Add charting presets on the Game tab.</div></div>`;
       const yards = Number(d.yards) || 0;
       el.innerHTML = `
         <div class="card"><h2>Possession</h2><div class="possession">${["home", "away"].map((t) => `<button class="btn ${g.possession === t ? "active" : ""}" data-possession="${t}">${esc(g[t + "Name"] || t)}</button>`).join("")}</div><div class="game-state"><div class="state-box"><span>Quarter</span><b>Q${g.quarter || 1}</b></div><div class="state-box"><span>Down &amp; distance</span><b>${g.down || 1} &amp; ${g.distance ?? 10}</b></div><div class="state-box"><span>Yard line</span><b>${g.yardLine ?? 25}</b></div></div><div style="margin-top:12px"><span class="section-label">Quick field adjustment</span><div class="button-row"><button class="btn small outline" data-state-step="down:-1">Down −</button><button class="btn small outline" data-state-step="down:1">Down +</button><button class="btn small outline" data-state-step="distance:-1">To go −</button><button class="btn small outline" data-state-step="distance:1">To go +</button></div><div class="yard-adjust" style="margin-top:8px"><button class="btn outline" data-state-step="yardLine:-5">−5</button><b>${g.yardLine ?? 25}</b><button class="btn outline" data-state-step="yardLine:5">+5</button></div></div></div>
+        ${chartMarkup}
         <div class="card"><h2>Play type</h2><div class="choices">${typeButton("run", "Run")}${typeButton("pass", "Pass")}${typeButton("sack", "Sack")}${typeButton("punt", "Punt")}${typeButton("kickoff", "Kickoff")}${typeButton("fg", "FG")}${typeButton("xp", "XP")}${typeButton("2pt", "2PT")}${typeButton("penalty", "Penalty")}${typeButton("kneel", "Kneel")}${typeButton("spike", "Spike")}</div></div>
         ${["run", "kneel"].includes(d.playType) ? `<div class="card"><h2>Rusher</h2>${chips("rusher", roster)}</div>` : ""}
         ${d.playType === "pass" ? `<div class="card"><h2>Pass</h2><span class="section-label">Passer</span>${chips("passer", roster)}<span class="section-label" style="margin-top:12px">Receiver</span>${chips("receiver", roster)}<span class="section-label" style="margin-top:12px">Result</span><div class="choices"><button class="choice ${d.complete ? "selected" : ""}" data-bool="complete" data-value="true">Complete</button><button class="choice ${!d.complete ? "selected" : ""}" data-bool="complete" data-value="false">Incomplete</button></div></div>` : ""}
@@ -320,7 +359,7 @@
     function recentMarkup() {
       const recent = [...state.plays].slice(-5).reverse();
       if (!recent.length) return `<div class="empty">No plays recorded.</div>`;
-      return recent.map((p) => { const f = formatPlay(p, state.game?.rosters, teamNames()); return `<div class="recent-row"><div class="recent-main"><strong>${esc(f.team)} · ${esc(f.situation)}</strong><small>${esc(f.desc)}${f.tags.length ? ` · ${esc(f.tags.join(" · "))}` : ""}</small></div></div>`; }).join("");
+      return recent.map((p) => { const f = formatPlay(p, state.game?.rosters, teamNames()); return `<div class="recent-row"><div class="recent-main"><strong>${esc(f.team)} · ${esc(f.situation)}</strong><small>${esc(f.desc)}${f.tags.length ? ` · ${esc(f.tags.join(" · "))}` : ""}${f.chartText ? ` · ${esc(f.chartText)}` : ""}</small></div></div>`; }).join("");
     }
     function setYards(value) {
       state.draft.yards = Number(value) || 0;
@@ -341,6 +380,11 @@
       document.querySelectorAll("[data-play-type]").forEach((b) => b.addEventListener("click", () => { state.draft.playType = b.dataset.playType; renderTrack(); }));
       document.querySelectorAll("[data-yards]").forEach((b) => b.addEventListener("click", () => setYards(b.dataset.yards)));
       document.querySelector("#yardsInput")?.addEventListener("input", (e) => { state.draft.yards = Number(e.target.value) || 0; if (!state.draft.manualFirstDown) state.draft.firstDown = state.draft.yards >= Number(state.game?.distance || 10); if (!state.draft.manualTouchdown) state.draft.touchdown = Number(state.game?.yardLine || 0) + state.draft.yards >= 100; });
+      document.querySelectorAll("[data-chart-field]").forEach((b) => b.addEventListener("click", () => {
+        const key = b.dataset.chartField;
+        state.draft.chart[key] = state.draft.chart[key] === b.dataset.chartValue ? "" : b.dataset.chartValue;
+        renderTrack();
+      }));
       document.querySelectorAll("[data-chip]").forEach((b) => b.addEventListener("click", () => {
         const key = b.dataset.chip;
         if (b.dataset.multi === "true") state.draft[key] = state.draft[key].includes(b.dataset.player) ? state.draft[key].filter((id) => id !== b.dataset.player) : [...state.draft[key], b.dataset.player];
@@ -376,6 +420,9 @@
       const g = state.game, d = state.draft, team = g.possession || "home";
       const seq = Number(g.nextSeq) || (state.plays.length ? Math.max(...state.plays.map((p) => Number(p.seq) || 0)) + 1 : 1);
       const yards = Number(d.yards) || 0;
+      const chart = Object.fromEntries(CHART_FIELDS
+        .map(({ key }) => [key, d.chart?.[key]])
+        .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== ""));
       const p = {
         seq, team, quarter: Number(g.quarter) || 1, playType: d.playType, down: Number(g.down) || 1,
         distance: Number(g.distance) || 10, yardLine: Number(g.yardLine) || 0, yards,
@@ -385,6 +432,7 @@
         intBy: d.intBy || undefined, ffBy: d.ffBy || undefined, good: ["fg", "xp", "2pt"].includes(d.playType) ? !!d.good : undefined,
         penaltyOn: d.playType === "penalty" ? d.penaltyOn : undefined, penaltyYards: d.playType === "penalty" ? Number(d.penaltyYards) || 0 : undefined,
         noPlay: d.playType === "penalty" ? !!d.noPlay : false, ts: serverTimestamp(),
+        chart: Object.keys(chart).length ? chart : undefined,
         stateBefore: { quarter: g.quarter || 1, possession: g.possession || "home", down: g.down || 1, distance: g.distance || 10, yardLine: g.yardLine ?? 25 }
       };
       Object.keys(p).forEach((key) => { if (p[key] === undefined) delete p[key]; });
@@ -395,7 +443,10 @@
         await updateDoc(gameRef(state.gameId), { ...next, nextSeq: seq + 1, updatedAt: serverTimestamp() });
         state.game = { ...state.game, ...next, nextSeq: seq + 1 };
         toast(`Saved Q${p.quarter} ${p.playType} play`);
+        const keep = { ...state.draft.chart };
+        delete keep.result;
         state.draft = blankDraft();
+        state.draft.chart = keep;
         renderTrack();
       } catch (err) { connection(false, err.message); toast(`Save failed: ${err.message}`, true); }
     }
@@ -447,7 +498,7 @@
     function renderLog() {
       const el = $("logList");
       if (!state.plays.length) { el.innerHTML = `<div class="empty">No plays recorded.</div>`; return; }
-      el.innerHTML = [...state.plays].reverse().map((p) => { const f = formatPlay(p, state.game?.rosters, teamNames()); return `<div class="log-row"><div class="log-main"><strong>#${p.seq} · ${esc(f.team)} · ${esc(f.situation)}</strong><small>${esc(f.desc)}${f.tags.length ? ` · ${esc(f.tags.join(" · "))}` : ""}</small></div><button class="btn small outline" data-edit-play="${esc(p.id)}">Edit</button><button class="btn small danger" data-delete-play="${esc(p.id)}">Delete</button></div>`; }).join("");
+      el.innerHTML = [...state.plays].reverse().map((p) => { const f = formatPlay(p, state.game?.rosters, teamNames()); return `<div class="log-row"><div class="log-main"><strong>#${p.seq} · ${esc(f.team)} · ${esc(f.situation)}</strong><small>${esc(f.desc)}${f.tags.length ? ` · ${esc(f.tags.join(" · "))}` : ""}${f.chartText ? ` · ${esc(f.chartText)}` : ""}</small></div><button class="btn small outline" data-edit-play="${esc(p.id)}">Edit</button><button class="btn small danger" data-delete-play="${esc(p.id)}">Delete</button></div>`; }).join("");
       document.querySelectorAll("[data-edit-play]").forEach((b) => b.addEventListener("click", () => editPlay(b.dataset.editPlay)));
       document.querySelectorAll("[data-delete-play]").forEach((b) => b.addEventListener("click", () => deletePlay(b.dataset.deletePlay)));
     }
@@ -461,6 +512,24 @@
     async function deletePlay(id) {
       if (!confirm("Delete this play? Game state will not be recalculated.")) return;
       try { await deleteDoc(playRef(state.gameId, id)); toast("Play deleted"); } catch (err) { connection(false, err.message); toast(`Delete failed: ${err.message}`, true); }
+    }
+    async function saveChartPresets() {
+      if (!state.game) return toast("Select a game first.", true);
+      const chartOptions = Object.fromEntries(CHART_FIELDS.map(({ key }) => {
+        const input = $(`chartOption-${key}`);
+        const values = (input?.value || "").split(",").map((value) => value.trim()).filter(Boolean);
+        return [key, [...new Set(values)]];
+      }));
+      try {
+        await updateDoc(gameRef(state.gameId), { chartOptions, updatedAt: serverTimestamp() });
+        localStorage.setItem("bgsnChartOptions", JSON.stringify(chartOptions));
+        state.game = { ...state.game, chartOptions };
+        fillGameForm();
+        toast("Charting presets saved");
+      } catch (err) {
+        connection(false, err.message);
+        toast(`Preset save failed: ${err.message}`, true);
+      }
     }
     function renderAll() {
       renderScore(); renderGames(); renderRoster(); renderLog();
@@ -492,6 +561,7 @@
     document.querySelectorAll(".tab[data-tab]").forEach((b) => b.addEventListener("click", () => { state.tab = b.dataset.tab; renderAll(); }));
     document.querySelectorAll("[data-roster-team]").forEach((b) => b.addEventListener("click", () => { state.rosterTeam = b.dataset.rosterTeam; renderRoster(); }));
     $("saveGameBtn").addEventListener("click", saveGameDetails);
+    $("saveChartPresetsBtn").addEventListener("click", saveChartPresets);
     $("quarterSelect").addEventListener("change", async (event) => {
       if (!state.game) return;
       try { await updateDoc(gameRef(state.gameId), { quarter: Number(event.target.value), updatedAt: serverTimestamp() }); } catch (err) { connection(false, err.message); toast(`Quarter update failed: ${err.message}`, true); }
@@ -502,7 +572,7 @@
     $("trackPanel").addEventListener("focusout", (event) => {
       if (!event.currentTarget.contains(event.relatedTarget) && state.trackRefreshPending) renderTrack();
     });
-    fillGameForm(); updateUrl(); renderAll(); refreshGames(); subscribeGame(state.gameId);
+    renderChartPresetFields(); fillGameForm(); updateUrl(); renderAll(); refreshGames(); subscribeGame(state.gameId);
   </script>
 </body>
 </html>
