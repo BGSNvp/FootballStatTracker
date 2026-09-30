@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getFirestore, doc, collection, setDoc, updateDoc, deleteDoc, addDoc,
-  onSnapshot, query, orderBy, getDocs, serverTimestamp
+  onSnapshot, query, orderBy, getDoc, getDocs, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 const app = initializeApp({
@@ -42,5 +42,5 @@ export function watchPlays(gameId, onData, onError) {
 
 export {
   doc, collection, setDoc, updateDoc, deleteDoc, addDoc,
-  onSnapshot, query, orderBy, getDocs, serverTimestamp
+  onSnapshot, query, orderBy, getDoc, getDocs, serverTimestamp
 };

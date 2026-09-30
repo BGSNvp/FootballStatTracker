@@ -104,6 +104,8 @@
     <div class="spacer"></div>
     <select id="gamePick" title="Game"></select>
     <span class="chip"><span class="dot" id="dot"></span> <span id="status">connecting…</span></span>
+    <a class="chip" href="report.html?mode=half" id="halfLink">Print halftime sheet</a>
+    <a class="chip" href="report.html?mode=full" id="fullLink">Print full report</a>
     <a class="chip" href="index.html" id="trackLink">Stat entry →</a>
   </div>
 </header>
@@ -306,6 +308,8 @@ function renderHeader(totals) {
   const poss = game && game.possession ? names[game.possession] : null;
   $("possession").textContent = poss ? `Ball: ${poss}` : "—";
   $("trackLink").href = `index.html?game=${encodeURIComponent(gameId)}`;
+  $("halfLink").href = `report.html?game=${encodeURIComponent(gameId)}&mode=half`;
+  $("fullLink").href = `report.html?game=${encodeURIComponent(gameId)}&mode=full`;
 }
 
 function renderNotes() {
