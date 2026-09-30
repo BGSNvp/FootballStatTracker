@@ -396,26 +396,26 @@ function renderComparison(totals) {
 
 const PLAYER_TABLES = {
   rush: {
-    cols: [["Player", (p) => p.name ? `#${p.num} ${p.name}` : p.id], ["Att", (p) => p.rushAtt], ["Yds", (p) => p.rushYards],
+    cols: [["Player", (p) => (p.name || p.num) ? `#${p.num} ${p.name || ""}`.trim() : p.id], ["Att", (p) => p.rushAtt], ["Yds", (p) => p.rushYards],
       ["YPC", (p) => f1(p.rushYPC)], ["Long", (p) => p.rushLong], ["TD", (p) => p.rushTD], ["Succ%", (p) => pct(p.successRate)]],
     filter: (p) => p.rushAtt > 0,
     sort: (a, b) => b.rushYards - a.rushYards
   },
   pass: {
-    cols: [["Player", (p) => p.name ? `#${p.num} ${p.name}` : p.id], ["C/A", (p) => `${p.passComp}/${p.passAtt}`],
+    cols: [["Player", (p) => (p.name || p.num) ? `#${p.num} ${p.name || ""}`.trim() : p.id], ["C/A", (p) => `${p.passComp}/${p.passAtt}`],
       ["Yds", (p) => p.passYards], ["YPA", (p) => f1(p.passYPA)], ["Comp%", (p) => pct(p.compPct)],
       ["TD", (p) => p.passTD], ["INT", (p) => p.passInt]],
     filter: (p) => p.passAtt > 0,
     sort: (a, b) => b.passYards - a.passYards
   },
   rec: {
-    cols: [["Player", (p) => p.name ? `#${p.num} ${p.name}` : p.id], ["Tgt", (p) => p.targets], ["Rec", (p) => p.rec],
+    cols: [["Player", (p) => (p.name || p.num) ? `#${p.num} ${p.name || ""}`.trim() : p.id], ["Tgt", (p) => p.targets], ["Rec", (p) => p.rec],
       ["Yds", (p) => p.recYards], ["YPR", (p) => f1(p.recYPC)], ["Long", (p) => p.recLong], ["TD", (p) => p.recTD]],
     filter: (p) => p.targets > 0,
     sort: (a, b) => b.recYards - a.recYards
   },
   def: {
-    cols: [["Player", (p) => p.name ? `#${p.num} ${p.name}` : p.id], ["Tkl", (p) => p.tackles], ["TFL", (p) => p.tfl],
+    cols: [["Player", (p) => (p.name || p.num) ? `#${p.num} ${p.name || ""}`.trim() : p.id], ["Tkl", (p) => p.tackles], ["TFL", (p) => p.tfl],
       ["Sacks", (p) => p.sacks], ["INT", (p) => p.ints], ["FF", (p) => p.ff]],
     filter: (p) => p.tackles + p.sacks + p.ints + p.ff > 0,
     sort: (a, b) => (b.tackles + b.sacks * 2 + b.ints * 2) - (a.tackles + a.sacks * 2 + a.ints * 2)

@@ -128,8 +128,8 @@
         </div>
         <div class="field"><label class="section-label" for="gameNameInput">Game name</label><input id="gameNameInput" placeholder="Friday night matchup" /></div>
         <div class="grid-2">
-          <div class="field"><label class="section-label" for="homeNameInput">Home team</label><input id="homeNameInput" placeholder="Home" /></div>
-          <div class="field"><label class="section-label" for="awayNameInput">Away team</label><input id="awayNameInput" placeholder="Away" /></div>
+          <div class="field"><label class="section-label" for="homeNameInput">Home team</label><input id="homeNameInput" placeholder="SHS" /></div>
+          <div class="field"><label class="section-label" for="awayNameInput">Away team</label><input id="awayNameInput" placeholder="Opponent" /></div>
         </div>
         <div class="field"><label class="section-label" for="quarterSelect">Current quarter</label><select id="quarterSelect"><option value="1">1st quarter</option><option value="2">2nd quarter</option><option value="3">3rd quarter</option><option value="4">4th quarter</option><option value="5">Overtime</option></select></div>
         <button id="saveGameBtn" class="btn primary">Save game details</button>
@@ -171,6 +171,7 @@
         </div>
         <div class="field"><label class="section-label" for="playerPos">Position</label><input id="playerPos" placeholder="QB, RB, WR..." /></div>
         <button id="addPlayerBtn" class="btn primary" style="width:100%">Add player</button>
+        <button id="fillRosterBtn" class="btn outline" style="width:100%;margin-top:8px">Fill numbers 1–99</button>
       </div>
       <div class="card"><h2 id="rosterHeading">Home players</h2><div id="rosterList"></div></div>
     </section>
@@ -264,7 +265,7 @@
     function gameDefaults(id, fields = {}) {
       return {
         name: fields.name || "New football game", date: fields.date || today(), gameId: id,
-        homeName: fields.homeName || "Home", awayName: fields.awayName || "Away",
+        homeName: fields.homeName || "SHS", awayName: fields.awayName || "Opponent",
         rosters: { home: [], away: [] }, quarter: 1, possession: "home", down: 1, distance: 10,
         yardLine: 25, nextSeq: 1, chartOptions: storedChartOptions(), updatedAt: serverTimestamp()
       };
@@ -329,7 +330,7 @@
       const roster = (g.rosters?.[team] || []);
       const defRoster = (g.rosters?.[defense] || []);
       const chartOptions = currentChartOptions();
-      const chips = (key, list, multi = false) => `<div class="choices">${list.length ? list.map((p) => `<button class="choice ${(multi ? d[key].includes(p.id) : d[key] === p.id) ? "selected" : ""}" data-chip="${key}" data-player="${esc(p.id)}" data-multi="${multi}">#${esc(p.num)} ${esc(p.name)}</button>`).join("") : `<span class="hint">Add players in the Roster tab.</span>`}</div>`;
+      const chips = (key, list, multi = false) => `<div class="choices">${list.length ? list.map((p) => `<button class="choice ${(multi ? d[key].includes(p.id) : d[key] === p.id) ? "selected" : ""}" data-chip="${key}" data-player="${esc(p.id)}" data-multi="${multi}">${esc(`#${p.num} ${p.name}`.trim())}</button>`).join("") : `<span class="hint">Add players in the Roster tab.</span>`}</div>`;
       const typeButton = (value, label) => `<button class="choice ${d.playType === value ? "selected" : ""}" data-play-type="${value}">${label}</button>`;
       const chartMarkup = CHART_FIELDS.some(({ key }) => chartOptions[key].length)
         ? `<div class="card"><h2>Charting</h2>${CHART_FIELDS.filter(({ key }) => chartOptions[key].length).map(({ key, label }) => `<span class="section-label">${esc(label)}</span><div class="choices">${chartOptions[key].map((value) => `<button class="choice ${d.chart?.[key] === value ? "selected" : ""}" data-chart-field="${esc(key)}" data-chart-value="${esc(value)}">${esc(value)}</button>`).join("")}</div>`).join("")}</div>`
@@ -465,8 +466,11 @@
     function renderRoster() {
       const team = state.rosterTeam, list = state.game?.rosters?.[team] || [];
       $("rosterHeading").textContent = `${state.game?.[team + "Name"] || team} players`;
-      document.querySelectorAll("[data-roster-team]").forEach((b) => b.classList.toggle("selected", b.dataset.rosterTeam === team));
-      $("rosterList").innerHTML = state.game ? (list.length ? list.map((p) => `<div class="roster-item"><div class="details"><strong>#${esc(p.num)} ${esc(p.name)}</strong><small>${esc(p.pos || "Position not set")}</small></div><button class="btn small outline" data-edit-player="${esc(p.id)}">Edit</button><button class="btn small danger" data-delete-player="${esc(p.id)}">Delete</button></div>`).join("") : `<div class="empty">No players yet.</div>`) : `<div class="empty">Select a game first.</div>`;
+      document.querySelectorAll("[data-roster-team]").forEach((b) => {
+        b.classList.toggle("selected", b.dataset.rosterTeam === team);
+        b.textContent = state.game?.[b.dataset.rosterTeam + "Name"] || (b.dataset.rosterTeam === "home" ? "Home" : "Away");
+      });
+      $("rosterList").innerHTML = state.game ? (list.length ? list.map((p) => `<div class="roster-item"><div class="details"><strong>${esc(`#${p.num} ${p.name}`.trim())}</strong><small>${esc(p.pos || "Position not set")}</small></div><button class="btn small outline" data-edit-player="${esc(p.id)}">Edit</button><button class="btn small danger" data-delete-player="${esc(p.id)}">Delete</button></div>`).join("") : `<div class="empty">No players yet.</div>`) : `<div class="empty">Select a game first.</div>`;
       document.querySelectorAll("[data-edit-player]").forEach((b) => b.addEventListener("click", () => editPlayer(b.dataset.editPlayer)));
       document.querySelectorAll("[data-delete-player]").forEach((b) => b.addEventListener("click", () => deletePlayer(b.dataset.deletePlayer)));
     }
@@ -476,11 +480,34 @@
     async function addPlayer() {
       if (!state.game) return toast("Select a game first.", true);
       const num = $("playerNum").value.trim(), name = $("playerName").value.trim(), pos = $("playerPos").value.trim();
-      if (!name) return toast("Enter a player name.", true);
+      if (!num && !name) return toast("Enter a number or name.", true);
       const rosters = structuredClone(state.game.rosters || { home: [], away: [] });
       rosters[state.rosterTeam].push({ id: newId(), num, name, pos });
       await writeRosters(rosters);
       $("playerNum").value = ""; $("playerName").value = ""; $("playerPos").value = "";
+    }
+    async function fillRoster() {
+      if (!state.game) return toast("Select a game first.", true);
+      const teamName = state.game[state.rosterTeam + "Name"] || (state.rosterTeam === "home" ? "Home" : "Away");
+      if (!confirm(`Fill missing numbers 1–99 for ${teamName}?`)) return;
+      const rosters = structuredClone(state.game.rosters || { home: [], away: [] });
+      const list = rosters[state.rosterTeam];
+      const existing = new Set(list.map((p) => String(p.num).trim()));
+      const missing = Array.from({ length: 99 }, (_, i) => i + 1)
+        .filter((n) => !existing.has(String(n)));
+      if (!missing.length) return toast(`All numbers 1–99 are already on ${teamName}'s roster.`);
+      list.push(...missing.map((n) => ({ id: newId(), num: String(n), name: "", pos: "" })));
+      const numericValue = (p) => {
+        const value = String(p.num ?? "").trim();
+        return value && Number.isFinite(Number(value)) ? Number(value) : null;
+      };
+      list.sort((a, b) => {
+        const aNum = numericValue(a), bNum = numericValue(b);
+        if (aNum === null) return bNum === null ? 0 : 1;
+        if (bNum === null) return -1;
+        return aNum - bNum;
+      });
+      await writeRosters(rosters);
     }
     async function editPlayer(id) {
       const p = (state.game?.rosters?.[state.rosterTeam] || []).find((x) => x.id === id);
@@ -489,7 +516,7 @@
       const num = prompt("Jersey number:", p.num); if (num === null) return;
       const pos = prompt("Position:", p.pos || ""); if (pos === null) return;
       const rosters = structuredClone(state.game.rosters); const target = rosters[state.rosterTeam].find((x) => x.id === id);
-      Object.assign(target, { name: name.trim() || p.name, num: num.trim(), pos: pos.trim() }); await writeRosters(rosters);
+      Object.assign(target, { name: name.trim(), num: num.trim(), pos: pos.trim() }); await writeRosters(rosters);
     }
     async function deletePlayer(id) {
       if (!confirm("Delete this player from the roster?")) return;
@@ -543,7 +570,7 @@
     async function saveGameDetails() {
       const id = state.game ? state.gameId : ($("gameIdInput").value.trim() || state.gameId);
       if (!id) return toast("Enter a game ID or use New game.", true);
-      const fields = { name: $("gameNameInput").value.trim() || "Football game", date: $("gameDateInput").value || today(), homeName: $("homeNameInput").value.trim() || "Home", awayName: $("awayNameInput").value.trim() || "Away" };
+      const fields = { name: $("gameNameInput").value.trim() || "Football game", date: $("gameDateInput").value || today(), homeName: $("homeNameInput").value.trim() || "SHS", awayName: $("awayNameInput").value.trim() || "Opponent" };
       try {
         if (!state.game) await setDoc(gameRef(id), gameDefaults(id, fields));
         else await updateDoc(gameRef(state.gameId), { ...fields, gameId: state.gameId, updatedAt: serverTimestamp() });
@@ -552,10 +579,10 @@
     }
     async function createNewGame() {
       const name = prompt("Game name:", "Friday night football"); if (name === null) return;
-      const homeName = prompt("Home team:", "Home"); if (homeName === null) return;
-      const awayName = prompt("Away team:", "Away"); if (awayName === null) return;
+      const homeName = prompt("Home team:", "SHS"); if (homeName === null) return;
+      const awayName = prompt("Away team:", "Opponent"); if (awayName === null) return;
       let id = `${slugify(name)}-${Date.now().toString(36).slice(-5)}`;
-      try { await setDoc(gameRef(id), gameDefaults(id, { name: name.trim() || "Football game", homeName: homeName.trim() || "Home", awayName: awayName.trim() || "Away", date: today() })); state.gameId = id; subscribeGame(id); await refreshGames(); toast("New game created"); } catch (err) { connection(false, err.message); toast(`New game failed: ${err.message}`, true); }
+      try { await setDoc(gameRef(id), gameDefaults(id, { name: name.trim() || "Football game", homeName: homeName.trim() || "SHS", awayName: awayName.trim() || "Opponent", date: today() })); state.gameId = id; subscribeGame(id); await refreshGames(); toast("New game created"); } catch (err) { connection(false, err.message); toast(`New game failed: ${err.message}`, true); }
     }
     $("gameDateInput").value = today();
     document.querySelectorAll(".tab[data-tab]").forEach((b) => b.addEventListener("click", () => { state.tab = b.dataset.tab; renderAll(); }));
@@ -569,6 +596,7 @@
     $("newGameBtn").addEventListener("click", createNewGame);
     $("refreshGamesBtn").addEventListener("click", refreshGames);
     $("addPlayerBtn").addEventListener("click", addPlayer);
+    $("fillRosterBtn").addEventListener("click", fillRoster);
     $("trackPanel").addEventListener("focusout", (event) => {
       if (!event.currentTarget.contains(event.relatedTarget) && state.trackRefreshPending) renderTrack();
     });

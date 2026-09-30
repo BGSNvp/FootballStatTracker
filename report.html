@@ -171,7 +171,7 @@ const f1 = (v) => (Math.round(v * 10) / 10).toFixed(1);
 const pct = (v) => `${Math.round(v)}%`;
 const teamNames = () => ({ home: (game && game.homeName) || "Home", away: (game && game.awayName) || "Away" });
 const rosters = () => (game && game.rosters) || { home: [], away: [] };
-const playerLabel = (p) => esc(p.name ? `#${p.num} ${p.name}` : p.id);
+const playerLabel = (p) => esc((p.name || p.num) ? `#${p.num} ${p.name || ""}`.trim() : p.id);
 
 Chart.defaults.color = "#5b6672";
 Chart.defaults.borderColor = "#c9d1d9";
