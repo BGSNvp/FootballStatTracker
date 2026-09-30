@@ -24,15 +24,16 @@
     body { max-width: 720px; margin: 0 auto; padding: 14px 14px calc(24px + env(safe-area-inset-bottom)); }
     button, input, select { font: inherit; }
     button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
-    .header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 3px 0 12px; }
-    .header h1 { margin: 0; font-size: 1.25rem; letter-spacing: -.02em; }
+    .header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin: 3px 0 12px; }
+    .header h1 { margin: 0; font-size: 1.25rem; letter-spacing: -.02em; white-space: nowrap; }
     .status { border-radius: 999px; padding: 5px 10px; font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; }
     .status.connected { background: var(--accent-2); color: #07151a; }
     .status.offline { background: var(--danger); color: white; }
     .tabs { position: sticky; top: 0; z-index: 10; display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; padding: 6px 0 10px; background: var(--bg); }
     .tab { min-height: 44px; border: 2px solid var(--border); border-radius: 11px; background: var(--panel); color: var(--muted); font-size: .78rem; font-weight: 800; }
     .tab.active { border-color: var(--accent); background: var(--panel-2); color: var(--text); }
-    .tab.dashboard { grid-column: span 4; min-height: 36px; border-color: transparent; color: var(--accent-2); background: transparent; }
+    .header-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+    .dash-btn { display: inline-flex; align-items: center; min-height: 36px; padding: 6px 12px; border-radius: 10px; background: var(--accent); color: white; font-size: .8rem; font-weight: 800; text-decoration: none; white-space: nowrap; }
     .panel { display: none; }
     .panel.active { display: block; }
     .card { margin: 0 0 12px; padding: 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); }
@@ -103,14 +104,16 @@
 <body>
   <header class="header">
     <h1>BGSN Football Tracker</h1>
-    <span id="statusBadge" class="status offline">Connecting</span>
+    <div class="header-actions">
+      <a id="dashboardLink" class="dash-btn" href="dashboard.html">Coach dashboard →</a>
+      <span id="statusBadge" class="status offline">Connecting</span>
+    </div>
   </header>
   <nav class="tabs" aria-label="Main navigation">
     <button class="tab active" data-tab="game">Game</button>
     <button class="tab" data-tab="track">Track</button>
     <button class="tab" data-tab="roster">Roster</button>
     <button class="tab" data-tab="log">Log</button>
-    <a id="dashboardLink" class="tab dashboard" href="dashboard.html">Open coach dashboard →</a>
   </nav>
 
   <main>
