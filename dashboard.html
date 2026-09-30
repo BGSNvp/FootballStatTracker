@@ -153,6 +153,13 @@
       <table class="cmp"><tbody id="cmpBody"></tbody></table>
     </div>
 
+    <div class="card" style="grid-column: 1 / -1;">
+      <h2>Charting tendencies</h2>
+      <select id="chartField" aria-label="Charting dimension"></select>
+      <div class="scroll" id="chartHome"></div>
+      <div class="scroll" id="chartAway"></div>
+    </div>
+
     <div class="card">
       <h2>Player leaders <span class="teamtag home" id="plHomeTag">Home</span></h2>
       <div class="subtabs" data-side="home">
@@ -191,7 +198,8 @@
 import { watchGame, watchPlays, GAMES, collection, getDocs, db } from "./js/firebase.js";
 import {
   computeTeamStats, computePlayerStats, computeDrives, computeQuarterTrends,
-  computeMomentum, computeDownSplits, computeTypeSplits, trendNotes, formatPlay
+  computeMomentum, computeDownSplits, computeTypeSplits, trendNotes, formatPlay,
+  CHART_FIELDS, chartFieldsWithData, computeChartSplits, computePlayerChartSplits
 } from "./js/stats.js";
 
 const HOME_COLOR = "#4c9ffe";
@@ -204,8 +212,10 @@ let plays = [];
 let unsubGame = null;
 let unsubPlays = null;
 const cat = { home: "rush", away: "rush" };
+let chartField = "player";
 
 const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const teamNames = () => ({
   home: (game && game.homeName) || "Home",
   away: (game && game.awayName) || "Away"
@@ -386,26 +396,26 @@ function renderComparison(totals) {
 
 const PLAYER_TABLES = {
   rush: {
-    cols: [["Player", (p) => p.name ? `#${p.num} ${p.name}` : p.id], ["Att", (p) => p.rushAtt], ["Yds", (p) => p.rushYards],
+    cols: [["Player", (p) => (p.name || p.num) ? `#${p.num} ${p.name || ""}`.trim() : p.id], ["Att", (p) => p.rushAtt], ["Yds", (p) => p.rushYards],
       ["YPC", (p) => f1(p.rushYPC)], ["Long", (p) => p.rushLong], ["TD", (p) => p.rushTD], ["Succ%", (p) => pct(p.successRate)]],
     filter: (p) => p.rushAtt > 0,
     sort: (a, b) => b.rushYards - a.rushYards
   },
   pass: {
-    cols: [["Player", (p) => p.name ? `#${p.num} ${p.name}` : p.id], ["C/A", (p) => `${p.passComp}/${p.passAtt}`],
+    cols: [["Player", (p) => (p.name || p.num) ? `#${p.num} ${p.name || ""}`.trim() : p.id], ["C/A", (p) => `${p.passComp}/${p.passAtt}`],
       ["Yds", (p) => p.passYards], ["YPA", (p) => f1(p.passYPA)], ["Comp%", (p) => pct(p.compPct)],
       ["TD", (p) => p.passTD], ["INT", (p) => p.passInt]],
     filter: (p) => p.passAtt > 0,
     sort: (a, b) => b.passYards - a.passYards
   },
   rec: {
-    cols: [["Player", (p) => p.name ? `#${p.num} ${p.name}` : p.id], ["Tgt", (p) => p.targets], ["Rec", (p) => p.rec],
+    cols: [["Player", (p) => (p.name || p.num) ? `#${p.num} ${p.name || ""}`.trim() : p.id], ["Tgt", (p) => p.targets], ["Rec", (p) => p.rec],
       ["Yds", (p) => p.recYards], ["YPR", (p) => f1(p.recYPC)], ["Long", (p) => p.recLong], ["TD", (p) => p.recTD]],
     filter: (p) => p.targets > 0,
     sort: (a, b) => b.recYards - a.recYards
   },
   def: {
-    cols: [["Player", (p) => p.name ? `#${p.num} ${p.name}` : p.id], ["Tkl", (p) => p.tackles], ["TFL", (p) => p.tfl],
+    cols: [["Player", (p) => (p.name || p.num) ? `#${p.num} ${p.name || ""}`.trim() : p.id], ["Tkl", (p) => p.tackles], ["TFL", (p) => p.tfl],
       ["Sacks", (p) => p.sacks], ["INT", (p) => p.ints], ["FF", (p) => p.ff]],
     filter: (p) => p.tackles + p.sacks + p.ints + p.ff > 0,
     sort: (a, b) => (b.tackles + b.sacks * 2 + b.ints * 2) - (a.tackles + a.sacks * 2 + a.ints * 2)
@@ -425,6 +435,36 @@ let playerStats = { home: [], away: [] };
 function renderPlayers() {
   $("plHome").innerHTML = playerTable(playerStats.home, cat.home);
   $("plAway").innerHTML = playerTable(playerStats.away, cat.away);
+}
+
+function renderChartSplits() {
+  const playerSplits = computePlayerChartSplits(plays, rosters());
+  const hasPlayer = [...playerSplits.home, ...playerSplits.away].some((row) => row.value !== "Unassigned");
+  const dimensions = [
+    ...(hasPlayer ? [{ key: "player", label: "Player" }] : []),
+    ...chartFieldsWithData(plays).map((key) => CHART_FIELDS.find((field) => field.key === key))
+  ];
+  const select = $("chartField");
+  select.innerHTML = dimensions.map(({ key, label }) => `<option value="${esc(key)}">${esc(label)}</option>`).join("");
+  if (!dimensions.length) {
+    chartField = "player";
+    select.style.display = "none";
+    $("chartHome").innerHTML = '<div class="empty">No charting data yet.</div>';
+    $("chartAway").innerHTML = "";
+    return;
+  }
+  if (!dimensions.some(({ key }) => key === chartField)) chartField = dimensions[0].key;
+  select.value = chartField;
+  select.style.display = "";
+  const splits = chartField === "player" ? playerSplits : computeChartSplits(plays, chartField);
+  const table = (side) => {
+    const rows = splits[side];
+    if (!rows.length) return '<div class="empty">No charting data yet.</div>';
+    return `<table><thead><tr><th>Value</th><th>Plays</th><th>Run</th><th>Pass</th><th>Avg yds</th><th>Succ%</th><th>TD</th><th>1st</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${esc(row.value)}</td><td>${row.plays}</td><td>${row.run}</td><td>${row.pass}</td><td>${f1(row.ypp)}</td><td>${pct(row.successRate)}</td><td>${row.td}</td><td>${row.firstDowns}</td></tr>`).join("")}</tbody></table>`;
+  };
+  const names = teamNames();
+  $("chartHome").innerHTML = `<span class="teamtag home">${esc(names.home)}</span>${table("home")}`;
+  $("chartAway").innerHTML = `<span class="teamtag away">${esc(names.away)}</span>${table("away")}`;
 }
 
 function renderDrives() {
@@ -566,11 +606,17 @@ function renderAll() {
   renderHeader(totals);
   renderNotes();
   renderComparison(totals);
+  renderChartSplits();
   renderPlayers();
   renderDrives();
   renderLog();
   renderCharts(totals);
 }
+
+$("chartField").addEventListener("change", (e) => {
+  chartField = e.target.value;
+  renderChartSplits();
+});
 
 /* ---------- live subscriptions ---------- */
 function subscribe() {
